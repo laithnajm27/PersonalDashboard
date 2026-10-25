@@ -55,7 +55,6 @@ class _KiAssistantViewState extends State<KiAssistantView> {
           : List<Map<String, String>>.of(_messages);
       final answer = await _edgeApi.askAssistant(
         messages: contextMessages,
-        insights: insights,
       );
       if (mounted) {
         setState(() => _messages.add({
@@ -177,8 +176,7 @@ class _KiAssistantViewState extends State<KiAssistantView> {
                         },
                       ),
               ),
-              if (_isSending)
-                const LinearProgressIndicator(minHeight: 2),
+              if (_isSending) const LinearProgressIndicator(minHeight: 2),
               SafeArea(
                 top: false,
                 child: Padding(
@@ -203,7 +201,8 @@ class _KiAssistantViewState extends State<KiAssistantView> {
                       const SizedBox(width: 8),
                       IconButton.filled(
                         tooltip: 'Senden',
-                        onPressed: insights == null || _isSending ? null : _send,
+                        onPressed:
+                            insights == null || _isSending ? null : _send,
                         icon: const Icon(Icons.send_rounded),
                       ),
                     ],

@@ -5,6 +5,7 @@
 .pub-cache/
 build/
 coverage/
+/supabase/.temp/
 .idea/
 .vscode/
 android/.gradle/

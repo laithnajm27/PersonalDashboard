@@ -29,10 +29,7 @@ class SupabaseService {
   }
 
   Future<List<Customer>> getCustomers() async {
-    final rows = await _client
-        .from(customersTable)
-        .select()
-        .order('name');
+    final rows = await _client.from(customersTable).select().order('name');
     return rows.map((row) => Customer.fromJson(row)).toList();
   }
 
@@ -121,10 +118,7 @@ class SupabaseService {
   }
 
   Future<List<CalendarEntry>> getCalendarEntries() async {
-    final rows = await _client
-        .from(calendarTable)
-        .select()
-        .order('date_time');
+    final rows = await _client.from(calendarTable).select().order('date_time');
     return rows.map((row) => CalendarEntry.fromJson(row)).toList();
   }
 

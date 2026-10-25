@@ -13,16 +13,113 @@ class InstagramView extends StatefulWidget {
   State<InstagramView> createState() => _InstagramViewState();
 }
 
-class _InstagramViewState extends State<InstagramView> {
+class _InstagramViewState extends State<InstagramView>
+    with WidgetsBindingObserver {
   String? _error;
+  bool _oauthOpened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadExistingConnection();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _oauthOpened) {
+      _oauthOpened = false;
+      _loadExistingConnection();
+    }
+  }
+
+  Future<void> _loadExistingConnection() async {
+    try {
+      final connection = await widget.controller.loadConnection();
+      if (connection != null) {
+        await widget.controller.connectAndLoad();
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error =
+            'Instagram-Verbindung konnte nicht geladen werden: $error');
+      }
+    }
+  }
 
   Future<void> _connect() async {
     setState(() => _error = null);
     try {
+      if (widget.controller.connection == null) {
+        await widget.controller.beginInstagramConnection();
+        _oauthOpened = true;
+      } else {
+        await widget.controller.connectAndLoad();
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() =>
+            _error = 'Meta-Insights konnten nicht geladen werden: $error');
+      }
+    }
+  }
+
+  Future<void> _disconnect() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Instagram trennen?'),
+        content: const Text(
+          'Das gespeicherte Instagram-Zugriffstoken wird aus dem Dashboard entfernt.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Trennen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await widget.controller.disconnectInstagram();
+      if (mounted) {
+        setState(() => _error = null);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+            () => _error = 'Instagram konnte nicht getrennt werden: $error');
+      }
+    }
+  }
+
+  Future<void> _refreshConnection() async {
+    setState(() => _error = null);
+    try {
+      final connection = await widget.controller.loadConnection();
+      if (connection == null) {
+        setState(() => _error =
+            'Noch kein Instagram-Konto verknüpft. Starte zuerst die Verbindung bei Instagram.');
+        return;
+      }
       await widget.controller.connectAndLoad();
     } catch (error) {
       if (mounted) {
-        setState(() => _error = 'Meta-Insights konnten nicht geladen werden: $error');
+        setState(() => _error =
+            'Instagram-Verbindung konnte nicht geprüft werden: $error');
       }
     }
   }
@@ -36,7 +133,7 @@ class _InstagramViewState extends State<InstagramView> {
         return Scaffold(
           appBar: AppBar(title: const Text('Instagram-Zentrale')),
           body: RefreshIndicator(
-            onRefresh: _connect,
+            onRefresh: _refreshConnection,
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
@@ -47,11 +144,13 @@ class _InstagramViewState extends State<InstagramView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          insights == null
-                              ? 'Verbinde dein Instagram-Konto'
-                              : insights.username.isEmpty
-                                  ? 'Instagram-Insights'
-                                  : '@${insights.username}',
+                          widget.controller.connection != null
+                              ? '@${widget.controller.connection!.username}'
+                              : insights == null
+                                  ? 'Verbinde dein Instagram-Konto'
+                                  : insights.username.isEmpty
+                                      ? 'Instagram-Insights'
+                                      : '@${insights.username}',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 8),
@@ -60,7 +159,8 @@ class _InstagramViewState extends State<InstagramView> {
                         ),
                         const SizedBox(height: 16),
                         FilledButton.icon(
-                          onPressed: widget.controller.isLoading ? null : _connect,
+                          onPressed:
+                              widget.controller.isLoading ? null : _connect,
                           icon: widget.controller.isLoading
                               ? const SizedBox(
                                   width: 18,
@@ -72,12 +172,34 @@ class _InstagramViewState extends State<InstagramView> {
                               : const Icon(Icons.link),
                           label: Text(
                             widget.controller.isLoading
-                                ? 'Lade Insights …'
-                                : insights == null
-                                    ? 'Konto verbinden'
+                                ? 'Instagram wird geladen …'
+                                : widget.controller.connection == null
+                                    ? 'Instagram-Konto verbinden'
                                     : 'Insights aktualisieren',
                           ),
                         ),
+                        if (widget.controller.connection == null) ...[
+                          const SizedBox(height: 4),
+                          TextButton.icon(
+                            onPressed: widget.controller.isLoading
+                                ? null
+                                : _refreshConnection,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text(
+                              'Nach der Instagram-Freigabe Status aktualisieren',
+                            ),
+                          ),
+                        ],
+                        if (widget.controller.connection != null) ...[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: widget.controller.isLoading
+                                ? null
+                                : _disconnect,
+                            icon: const Icon(Icons.link_off),
+                            label: const Text('Konto trennen'),
+                          ),
+                        ],
                         if (_error != null) ...[
                           const SizedBox(height: 12),
                           Text(
@@ -122,7 +244,7 @@ class _InstagramViewState extends State<InstagramView> {
                           ),
                           _MetricCard(
                             icon: Icons.visibility_outlined,
-                            title: 'Impressionen',
+                            title: 'Aufrufe',
                             value: NumberFormat.decimalPattern()
                                 .format(insights.impressions),
                           ),
@@ -150,8 +272,7 @@ class _InstagramViewState extends State<InstagramView> {
                       ),
                     )
                   else
-                    for (final post in insights.topPosts)
-                      _PostCard(post: post),
+                    for (final post in insights.topPosts) _PostCard(post: post),
                   if (insights.updatedAt != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),

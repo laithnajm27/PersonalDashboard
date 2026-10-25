@@ -12,7 +12,7 @@ ausschließlich in der Supabase Edge Function verwendet.
   auswählen; eine bereits erstellte Supabase-Region kann nicht nachträglich
   geändert werden.
 - Supabase CLI für Datenbankmigration und Edge-Function-Deployment
-- Meta Instagram Graph API-Zugang für ein Instagram Professional-Konto
+- Eine Meta-App vom Typ Business mit Instagram API und Business Login
 - Groq API-Key für den KI-Assistenten
 
 ## Lokal starten
@@ -45,27 +45,50 @@ Argumente oder GitHub Pages.
    Jede Zeile gehört über `owner_id` genau einem angemeldeten Konto. RLS
    erzwingt die Eigentümertrennung. `projects.shotlist_daten` ist JSONB und
    speichert ausschließlich manuell gepflegte Szenen.
-3. Für geschützte Edge-Function-Aufrufe bleibt JWT-Verifikation aktiv. Hinterlege
-   die Server-Secrets und deploye die Funktion:
+3. In der Meta-App unter **Instagram → API setup with Instagram Login → Set up
+   Instagram business login** richte Business Login ein:
+
+   - Füge als OAuth Redirect URI exakt
+     `https://<project-ref>.supabase.co/functions/v1/api` ein.
+   - Aktiviere die Berechtigungen `instagram_business_basic` und
+     `instagram_business_manage_insights`.
+   - Verwende die Instagram App ID und das Instagram App Secret aus diesem
+     Bereich. Für echte Nutzer außerhalb der App-Rollen brauchst du Advanced
+     Access und die dafür erforderliche Meta App Review.
+
+4. Erzeuge einen AES-256-Schlüssel für die serverseitige Tokenverschlüsselung,
+   zum Beispiel lokal mit `openssl rand -base64 32`. Hinterlege die Werte als
+   Supabase-Edge-Function-Secrets:
 
    ```sh
-   supabase secrets set GROQ_API_KEY=<groq-key>
-   supabase secrets set META_ACCESS_TOKEN=<meta-access-token>
-   supabase secrets set META_INSTAGRAM_USER_ID=<instagram-professional-user-id>
-   supabase secrets set META_GRAPH_VERSION=v21.0
+   supabase secrets set \
+     GROQ_API_KEY=<groq-key> \
+     META_APP_ID=<instagram-app-id> \
+     META_APP_SECRET=<instagram-app-secret> \
+     META_OAUTH_REDIRECT_URI=https://<project-ref>.supabase.co/functions/v1/api \
+     META_TOKEN_ENCRYPTION_KEY=<base64-aes-256-key> \
+     META_GRAPH_VERSION=v26.0
    supabase functions deploy api
    ```
 
-   Das Meta-Konto wird serverseitig über den vom Betreiber bereitgestellten
-   Professional-Account-Token konfiguriert. „Konto verbinden“ lädt dessen
-   aktuelle Graph-API-Insights; es gibt keinen clientseitigen Meta-Token und
-   keinen OAuth-Token-Speicher in dieser ersten Architekturversion. Der Token
-   benötigt die passenden Instagram-Graph-Berechtigungen (unter anderem
-   `instagram_basic` und `instagram_manage_insights`) und muss für die
-   konfigurierten Graph-API-Felder freigeschaltet sein.
-4. In Supabase Auth E-Mail/Passwort-Anmeldung aktivieren und die erlaubten
+   Die neue Migration legt private Tabellen für einmalige OAuth-States und
+   verschlüsselte Instagram-Tokens pro angemeldetem Supabase-Nutzer an. Führe
+   nach dem Hinzufügen der Migration erneut `supabase db push` aus. Die
+   Edge-Function-Callback-URL ist öffentlich erreichbar, akzeptiert aber nur
+   zuvor authentifiziert gestartete, kurzlebige und einmalig verwendbare
+   OAuth-States. Tokens werden AES-GCM-verschlüsselt und sind für App-Nutzer
+   nicht direkt lesbar. Beim Trennen des Instagram-Kontos wird der gespeicherte
+   Token aus der Datenbank entfernt.
+5. In Supabase Auth E-Mail/Passwort-Anmeldung aktivieren und die erlaubten
    Redirect-URLs für die lokale URL und die GitHub-Pages-URL konfigurieren.
    Die App bietet Anmeldung und Registrierung, aber **keinen Passwort-Reset**.
+
+Jeder angemeldete Nutzer klickt in der Instagram-Zentrale auf **Instagram-Konto
+verbinden**, autorisiert sein eigenes Professional-Konto bei Instagram und
+kehrt danach zum Dashboard zurück. Insights und KI-Kontext verwenden dann nur
+das Instagram-Konto dieses Supabase-Nutzers. Persönliche Instagram-Konten
+werden von der Instagram API nicht unterstützt; Business- oder Creator-Konten
+sind erforderlich.
 
 ## GitHub Pages
 

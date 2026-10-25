@@ -119,8 +119,7 @@ class _CustomerViewState extends State<CustomerView> {
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
                         itemCount: _customers.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final customer = _customers[index];
                           return Card(
@@ -140,7 +139,8 @@ class _CustomerViewState extends State<CustomerView> {
                                     .where((value) => value.isNotEmpty)
                                     .join(' · '),
                               ),
-                              isThreeLine: customer.notizen?.isNotEmpty ?? false,
+                              isThreeLine:
+                                  customer.notizen?.isNotEmpty ?? false,
                               trailing: Wrap(
                                 spacing: 0,
                                 children: [
@@ -237,7 +237,8 @@ class _CustomerDialogState extends State<_CustomerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.customer == null ? 'Kunde hinzufügen' : 'Kunde ändern'),
+      title:
+          Text(widget.customer == null ? 'Kunde hinzufügen' : 'Kunde ändern'),
       content: SizedBox(
         width: 460,
         child: Form(

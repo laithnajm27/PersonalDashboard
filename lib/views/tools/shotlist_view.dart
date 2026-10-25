@@ -97,9 +97,8 @@ class _ShotlistViewState extends State<ShotlistView> {
   }
 
   Future<void> _deleteScene(Shotlist shot) async {
-    final entries = _selectedProject!.shotlistDaten
-        .where((item) => item != shot)
-        .toList();
+    final entries =
+        _selectedProject!.shotlistDaten.where((item) => item != shot).toList();
     await _save(entries);
   }
 
@@ -121,7 +120,9 @@ class _ShotlistViewState extends State<ShotlistView> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Shotlist konnte nicht gespeichert werden: $error')),
+          SnackBar(
+              content:
+                  Text('Shotlist konnte nicht gespeichert werden: $error')),
         );
       }
     } finally {
@@ -169,7 +170,8 @@ class _ShotlistViewState extends State<ShotlistView> {
               ? _ShotlistError(message: _error!, onRetry: _load)
               : _projects.isEmpty
                   ? const Center(
-                      child: Text('Erstelle zuerst ein Projekt in der Pipeline.'),
+                      child:
+                          Text('Erstelle zuerst ein Projekt in der Pipeline.'),
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -220,17 +222,20 @@ class _ShotlistViewState extends State<ShotlistView> {
                                       columns: const [
                                         DataColumn(label: Text('Szene')),
                                         DataColumn(label: Text('Einstellung')),
-                                        DataColumn(label: Text('Kamerabewegung')),
+                                        DataColumn(
+                                            label: Text('Kamerabewegung')),
                                         DataColumn(label: Text('Beschreibung')),
                                         DataColumn(label: Text('Audio/SFX')),
                                         DataColumn(label: Text('Erledigt')),
                                         DataColumn(label: Text('Aktionen')),
                                       ],
                                       rows: [
-                                        for (final shot in project.shotlistDaten)
+                                        for (final shot
+                                            in project.shotlistDaten)
                                           DataRow(
                                             cells: [
-                                              DataCell(Text('${shot.szeneNummer}')),
+                                              DataCell(
+                                                  Text('${shot.szeneNummer}')),
                                               DataCell(
                                                 Text(shot.einstellungsGroesse),
                                                 onTap: () => _editScene(shot),
@@ -265,9 +270,9 @@ class _ShotlistViewState extends State<ShotlistView> {
                                                       ? null
                                                       : (value) =>
                                                           _toggleComplete(
-                                                        shot,
-                                                        value ?? false,
-                                                      ),
+                                                            shot,
+                                                            value ?? false,
+                                                          ),
                                                 ),
                                               ),
                                               DataCell(
@@ -287,8 +292,8 @@ class _ShotlistViewState extends State<ShotlistView> {
                                                       tooltip: 'Löschen',
                                                       onPressed: _isSaving
                                                           ? null
-                                                          : () =>
-                                                              _deleteScene(shot),
+                                                          : () => _deleteScene(
+                                                              shot),
                                                       icon: const Icon(
                                                         Icons.delete_outline,
                                                       ),
@@ -441,7 +446,8 @@ class _ShotlistError extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: Text(message, textAlign: TextAlign.center),
             ),
-            OutlinedButton(onPressed: onRetry, child: const Text('Erneut laden')),
+            OutlinedButton(
+                onPressed: onRetry, child: const Text('Erneut laden')),
           ],
         ),
       );

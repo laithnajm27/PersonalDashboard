@@ -153,12 +153,14 @@ class _PipelineViewState extends State<PipelineView> {
               ? _PipelineError(message: _error!, onRetry: _load)
               : _customers.isEmpty
                   ? const Center(
-                      child: Text('Lege zuerst einen Kunden an, um Projekte zu planen.'),
+                      child: Text(
+                          'Lege zuerst einen Kunden an, um Projekte zu planen.'),
                     )
                   : LayoutBuilder(
                       builder: (context, constraints) {
                         final width = (constraints.maxWidth - 48) / 3;
-                        final columnWidth = width.clamp(270.0, 380.0).toDouble();
+                        final columnWidth =
+                            width.clamp(270.0, 380.0).toDouble();
                         return SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),

@@ -165,8 +165,8 @@ class _AuthViewState extends State<AuthView> {
                         onPressed: _isLoading
                             ? null
                             : () => setState(
-                                  () => _isCreatingAccount =
-                                      !_isCreatingAccount,
+                                  () =>
+                                      _isCreatingAccount = !_isCreatingAccount,
                                 ),
                         child: Text(
                           _isCreatingAccount

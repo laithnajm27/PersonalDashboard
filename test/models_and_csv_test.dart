@@ -58,7 +58,8 @@ void main() {
       expect(decoded.projektTyp, ProjectType.video);
       expect(decoded.shotlistDaten.single.szeneNummer, 1);
       expect(decoded.shotlistDaten.single.istErledigt, isTrue);
-      expect(decoded.shotlistDaten.single.beschreibung, 'Produkt im Sonnenlicht');
+      expect(
+          decoded.shotlistDaten.single.beschreibung, 'Produkt im Sonnenlicht');
     });
   });
 

@@ -114,7 +114,8 @@ class _CalendarViewState extends State<CalendarView> {
       }
       final bytes = result.files.single.bytes;
       if (bytes == null) {
-        throw const FormatException('Die CSV-Datei konnte nicht gelesen werden.');
+        throw const FormatException(
+            'Die CSV-Datei konnte nicht gelesen werden.');
       }
       final entries = CsvHelper.importCalendar(utf8.decode(bytes));
       for (final entry in entries) {
@@ -204,55 +205,56 @@ class _CalendarViewState extends State<CalendarView> {
                     ),
                   ),
                 )
-          : _entries.isEmpty
-              ? const Center(
-                  child: Text('Noch keine Aufgaben oder Termine eingetragen.'),
-                )
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                    itemCount: _entries.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final entry = _entries[index];
-                      return Card(
-                        child: ListTile(
-                          leading: Checkbox(
-                            value: entry.erledigt,
-                                            onChanged: (value) =>
-                                                _toggleDone(entry, value ?? false),
-                          ),
-                          title: Text(
-                            entry.titel,
-                            style: entry.erledigt
-                                ? const TextStyle(
-                                    decoration: TextDecoration.lineThrough,
-                                  )
-                                : null,
-                          ),
-                          subtitle: Text(
-                            '${entry.typ == CalendarEntryType.task ? 'Aufgabe' : 'Termin'} · ${dateFormat.format(entry.dateTime)}',
-                          ),
-                          trailing: Wrap(
-                            children: [
-                              IconButton(
-                                tooltip: 'Bearbeiten',
-                                onPressed: () => _editEntry(entry),
-                                icon: const Icon(Icons.edit_outlined),
+              : _entries.isEmpty
+                  ? const Center(
+                      child:
+                          Text('Noch keine Aufgaben oder Termine eingetragen.'),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                        itemCount: _entries.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final entry = _entries[index];
+                          return Card(
+                            child: ListTile(
+                              leading: Checkbox(
+                                value: entry.erledigt,
+                                onChanged: (value) =>
+                                    _toggleDone(entry, value ?? false),
                               ),
-                              IconButton(
-                                tooltip: 'Löschen',
-                                onPressed: () => _deleteEntry(entry),
-                                icon: const Icon(Icons.delete_outline),
+                              title: Text(
+                                entry.titel,
+                                style: entry.erledigt
+                                    ? const TextStyle(
+                                        decoration: TextDecoration.lineThrough,
+                                      )
+                                    : null,
                               ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                              subtitle: Text(
+                                '${entry.typ == CalendarEntryType.task ? 'Aufgabe' : 'Termin'} · ${dateFormat.format(entry.dateTime)}',
+                              ),
+                              trailing: Wrap(
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Bearbeiten',
+                                    onPressed: () => _editEntry(entry),
+                                    icon: const Icon(Icons.edit_outlined),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Löschen',
+                                    onPressed: () => _deleteEntry(entry),
+                                    icon: const Icon(Icons.delete_outline),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
     );
   }
 }
@@ -344,7 +346,8 @@ class _CalendarEntryDialogState extends State<_CalendarEntryDialog> {
   Widget build(BuildContext context) {
     final format = DateFormat('dd.MM.yyyy · HH:mm');
     return AlertDialog(
-      title: Text(widget.entry == null ? 'Neuer Eintrag' : 'Eintrag bearbeiten'),
+      title:
+          Text(widget.entry == null ? 'Neuer Eintrag' : 'Eintrag bearbeiten'),
       content: SizedBox(
         width: 440,
         child: Form(

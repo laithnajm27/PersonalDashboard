@@ -93,3 +93,30 @@ class InstagramInsights {
         'updated_at': updatedAt?.toIso8601String(),
       };
 }
+
+class InstagramConnection {
+  const InstagramConnection({
+    required this.username,
+    required this.expiresAt,
+  });
+
+  final String username;
+  final DateTime expiresAt;
+
+  factory InstagramConnection.fromJson(Map<String, dynamic> json) {
+    final username = json['username'];
+    final expiresAt = json['expires_at'];
+    if (username is! String || expiresAt is! String) {
+      throw const FormatException('Ungültiger Instagram-Verbindungsstatus.');
+    }
+    final parsedExpiry = DateTime.tryParse(expiresAt);
+    if (parsedExpiry == null) {
+      throw const FormatException(
+          'Ungültiges Ablaufdatum der Meta-Verbindung.');
+    }
+    return InstagramConnection(
+      username: username,
+      expiresAt: parsedExpiry,
+    );
+  }
+}
