@@ -41,17 +41,28 @@ Argumente oder GitHub Pages.
    supabase db push
    ```
 
-   Die Migration erstellt `customers`, `projects` und `calendar_entries`.
-   Jede Zeile gehört über `owner_id` genau einem angemeldeten Konto. RLS
-   erzwingt die Eigentümertrennung. `projects.shotlist_daten` ist JSONB und
-   speichert ausschließlich manuell gepflegte Szenen.
+   Die Migrationen erstellen `customers`, `projects` und `calendar_entries`
+   sowie Profile, Equipment, Aufgaben, Ziele und das private Belegarchiv. Jede
+   Zeile gehört über `owner_id` genau einem angemeldeten Konto. RLS erzwingt die
+   Eigentümertrennung. `projects.shotlist_daten` ist JSONB und speichert
+   ausschließlich manuell gepflegte Szenen; sie werden nicht automatisch
+   erzeugt.
 3. In der Meta-App unter **Instagram → API setup with Instagram Login → Set up
    Instagram business login** richte Business Login ein:
 
+   - Verwende ausdrücklich die **Instagram App ID** aus dem Abschnitt
+     **Business login settings**, nicht eine ähnlich benannte Facebook-App-ID.
+   - Unter **App settings → Basic → Add platform → Website** die Domain
+     hinzufügen, unter der die App läuft, und speichern. Für GitHub Pages ist
+     das z. B. `https://<github-user>.github.io`; lokale Entwicklung läuft unter
+     `http://localhost:8765`.
    - Füge als OAuth Redirect URI exakt
      `https://<project-ref>.supabase.co/functions/v1/api` ein.
    - Aktiviere die Berechtigungen `instagram_business_basic` und
      `instagram_business_manage_insights`.
+   - Die **Embed URL** aus den Business-login-Einstellungen kann optional als
+     `META_OAUTH_EMBED_URL` hinterlegt werden. Die Edge Function verwendet sie
+     als Basis und prüft App-ID sowie Redirect URI vor dem Start.
    - Verwende die Instagram App ID und das Instagram App Secret aus diesem
      Bereich. Für echte Nutzer außerhalb der App-Rollen brauchst du Advanced
      Access und die dafür erforderliche Meta App Review.
@@ -63,7 +74,7 @@ Argumente oder GitHub Pages.
    ```sh
    supabase secrets set \
      GROQ_API_KEY=<groq-key> \
-     META_APP_ID=<instagram-app-id> \
+     META_INSTAGRAM_APP_ID=<instagram-app-id-from-business-login> \
      META_APP_SECRET=<instagram-app-secret> \
      META_OAUTH_REDIRECT_URI=https://<project-ref>.supabase.co/functions/v1/api \
      META_TOKEN_ENCRYPTION_KEY=<base64-aes-256-key> \
@@ -71,9 +82,11 @@ Argumente oder GitHub Pages.
    supabase functions deploy api
    ```
 
-   Die neue Migration legt private Tabellen für einmalige OAuth-States und
-   verschlüsselte Instagram-Tokens pro angemeldetem Supabase-Nutzer an. Führe
-   nach dem Hinzufügen der Migration erneut `supabase db push` aus. Die
+   Die Instagram-Migration legt private Tabellen für einmalige OAuth-States
+   und verschlüsselte Instagram-Tokens pro angemeldetem Supabase-Nutzer an.
+   Die Workspace-Migration ergänzt Profil-, Equipment-, Task- und Zieldaten
+   sowie Nummerierung und privaten PDF-Speicher für Belege. Führe nach jeder
+   neuen Migration erneut `supabase db push` aus. Die
    Edge-Function-Callback-URL ist öffentlich erreichbar, akzeptiert aber nur
    zuvor authentifiziert gestartete, kurzlebige und einmalig verwendbare
    OAuth-States. Tokens werden AES-GCM-verschlüsselt und sind für App-Nutzer
@@ -89,6 +102,27 @@ kehrt danach zum Dashboard zurück. Insights und KI-Kontext verwenden dann nur
 das Instagram-Konto dieses Supabase-Nutzers. Persönliche Instagram-Konten
 werden von der Instagram API nicht unterstützt; Business- oder Creator-Konten
 sind erforderlich.
+
+### Meta-Fehler „Invalid platform app“
+
+Prüfe im Meta Developer Dashboard, ob:
+
+1. `META_INSTAGRAM_APP_ID` wirklich die **Instagram App ID** aus **Instagram →
+   API setup with Instagram Login → Business login settings** ist, nicht die
+   allgemeine Meta/Facebook-App-ID.
+2. In **App settings → Basic → Add platform → Website** die verwendete Live-
+   Domain eingetragen und gespeichert wurde. Bei GitHub Pages: die Origin
+   `https://<github-user>.github.io`.
+3. Die OAuth Redirect URI unter den Instagram Business Login Settings exakt
+   `https://<project-ref>.supabase.co/functions/v1/api` lautet.
+4. Business Login und die beiden oben genannten Berechtigungen aktiviert sind.
+   Für Nutzer, die keine App-Rollen/Tester sind, sind Advanced Access und Meta
+   App Review notwendig.
+
+Nach einer Änderung an Edge Function Secrets die Funktion erneut deployen.
+Der Code kann Meta-Einstellungen außerhalb von Supabase nicht selbst ändern;
+wenn die vier Werte stimmen und der Fehler bleibt, müssen App-Modus, Testrollen
+und Review-Status im Meta Dashboard geprüft werden.
 
 ## GitHub Pages
 
@@ -123,6 +157,26 @@ flutter build apk --release \
 Import und Export verwenden UTF-8 CSV mit Headern `typ,titel,date_time,erledigt`.
 `typ` ist `task` oder `event`, Datum/Uhrzeit ISO-8601; boolesche Werte akzeptieren
 `true`/`false`, `1`/`0` und `ja`/`nein`.
+
+## Dashboard-Module
+
+- **Next Up** zeigt offene Kalender- und Aufgabenpunkte der kommenden 14 Tage.
+- **Pipeline** bietet Statusfilter und einen Filter für Projekte, die länger
+  als 14 Tage im Status „In Arbeit“ sind.
+- **Kalender** bietet Monats-, Wochen- und Tagesansicht sowie CSV-Import/Export.
+- **Shotlist** bleibt ausschließlich manuell; Equipment wird pro Szene
+  ausgewählt und die Tabelle kann als PDF geteilt werden.
+- **Rechnungen & Quittungen** werden mit laufender Nummer und PDF-Archiv
+  erstellt. Finalisierte PDFs sind unveränderlich gespeichert; die Prüfsumme
+  wird beim späteren Öffnen kontrolliert. Das ist jedoch
+  **keine GoBD-Zertifizierung und keine steuerliche oder rechtliche Beratung**.
+  Vor dem produktiven Einsatz bitte Nummernkreis, Pflichtangaben, Aufbewahrung
+  und steuerliche Behandlung durch eine Steuerberatung prüfen lassen.
+
+Profil-, Rechnungs-, Theme- und Equipmentdaten bleiben an das jeweilige
+Supabase-Konto gebunden. Fehlende Absenderdaten können beim Erstellen eines
+Belegs eingegeben werden; dadurch werden sie nicht automatisch im Profil
+gespeichert.
 
 ## Qualitätschecks
 

@@ -10,8 +10,10 @@ class AuthView extends StatefulWidget {
 
 class _AuthViewState extends State<AuthView> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordConfirmationController = TextEditingController();
   bool _isCreatingAccount = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -19,7 +21,9 @@ class _AuthViewState extends State<AuthView> {
   @override
   void dispose() {
     _emailController.dispose();
+    _nameController.dispose();
     _passwordController.dispose();
+    _passwordConfirmationController.dispose();
     super.dispose();
   }
 
@@ -34,6 +38,7 @@ class _AuthViewState extends State<AuthView> {
         final response = await auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text,
+          data: {'full_name': _nameController.text.trim()},
         );
         if (mounted && response.session == null) {
           _showMessage(
@@ -97,6 +102,25 @@ class _AuthViewState extends State<AuthView> {
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 28),
+                      if (_isCreatingAccount) ...[
+                        TextFormField(
+                          controller: _nameController,
+                          textCapitalization: TextCapitalization.words,
+                          autofillHints: const [AutofillHints.name],
+                          decoration: const InputDecoration(
+                            labelText: 'Vollständiger Name',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                          validator: (value) {
+                            if (_isCreatingAccount &&
+                                (value == null || value.trim().isEmpty)) {
+                              return 'Bitte gib deinen Namen ein.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                      ],
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -141,6 +165,24 @@ class _AuthViewState extends State<AuthView> {
                           return null;
                         },
                       ),
+                      if (_isCreatingAccount) ...[
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _passwordConfirmationController,
+                          obscureText: _obscurePassword,
+                          decoration: const InputDecoration(
+                            labelText: 'Passwort bestätigen',
+                            prefixIcon: Icon(Icons.lock_reset_outlined),
+                          ),
+                          validator: (value) {
+                            if (_isCreatingAccount &&
+                                value != _passwordController.text) {
+                              return 'Die Passwörter stimmen nicht überein.';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       FilledButton(
                         onPressed: _isLoading ? null : _submit,
@@ -164,10 +206,12 @@ class _AuthViewState extends State<AuthView> {
                       TextButton(
                         onPressed: _isLoading
                             ? null
-                            : () => setState(
-                                  () =>
-                                      _isCreatingAccount = !_isCreatingAccount,
-                                ),
+                            : () => setState(() {
+                                  _isCreatingAccount = !_isCreatingAccount;
+                                  _formKey.currentState?.reset();
+                                  _passwordController.clear();
+                                  _passwordConfirmationController.clear();
+                                }),
                         child: Text(
                           _isCreatingAccount
                               ? 'Bereits registriert? Anmelden'

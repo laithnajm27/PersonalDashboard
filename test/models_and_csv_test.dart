@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:personal_dashboard/models/calendar.dart';
 import 'package:personal_dashboard/models/customer.dart';
+import 'package:personal_dashboard/models/invoice.dart';
 import 'package:personal_dashboard/models/project.dart';
 import 'package:personal_dashboard/models/shotlist.dart';
 import 'package:personal_dashboard/services/csv_helper.dart';
+import 'package:personal_dashboard/models/workspace.dart';
 
 void main() {
   group('Customer JSON mapping', () {
@@ -58,8 +60,56 @@ void main() {
       expect(decoded.projektTyp, ProjectType.video);
       expect(decoded.shotlistDaten.single.szeneNummer, 1);
       expect(decoded.shotlistDaten.single.istErledigt, isTrue);
+      expect(decoded.shotlistDaten.single.equipmentIds, isEmpty);
       expect(
           decoded.shotlistDaten.single.beschreibung, 'Produkt im Sonnenlicht');
+    });
+
+    test('round-trips manually assigned equipment IDs', () {
+      const shot = Shotlist(
+        szeneNummer: 2,
+        equipmentIds: ['camera-1', 'lens-2'],
+      );
+      expect(Shotlist.fromJson(shot.toJson()).equipmentIds, shot.equipmentIds);
+    });
+  });
+
+  group('Workspace and invoice data mapping', () {
+    test('maps in-progress task status to the database enum', () {
+      const task = DashboardTask(
+        title: 'Angebot nachfassen',
+        status: TaskStatus.inProgress,
+      );
+      final json = task.toJson();
+      expect(json['status'], 'in_progress');
+      expect(DashboardTask.fromJson(json).status, TaskStatus.inProgress);
+    });
+
+    test('rounds invoice totals and snapshots supplier values', () {
+      final draft = InvoiceDraft(
+        type: InvoiceDocumentType.invoice,
+        customerName: 'Musterkunde',
+        customerAddress: 'Musterstraße 1',
+        issueDate: DateTime(2026, 10, 25),
+        lines: [
+          InvoiceLine(
+            description: 'Fotoauftrag',
+            quantity: 2,
+            unitPrice: 12.349,
+          ),
+        ],
+      );
+      final snapshot = draft.toSnapshot({
+        'companyName': 'Studio Beispiel',
+        'companyAddress': 'Beispielweg 2',
+        'taxNumber': '123/456/789',
+      });
+      expect(draft.subtotal, 24.70);
+      expect(draft.taxAmount, 4.69);
+      expect(draft.total, 29.39);
+      expect(snapshot['supplier']['name'], 'Studio Beispiel');
+      expect(snapshot['supplier']['tax_number'], '123/456/789');
+      expect(snapshot['total'], draft.total);
     });
   });
 

@@ -4,11 +4,14 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import '../../models/calendar.dart';
 import '../../services/csv_helper.dart';
 import '../../services/supabase_service.dart';
 import 'calendar_help_view.dart';
+
+enum _CalendarDisplay { month, week, day }
 
 class CalendarView extends StatefulWidget {
   const CalendarView({super.key});
@@ -20,6 +23,9 @@ class CalendarView extends StatefulWidget {
 class _CalendarViewState extends State<CalendarView> {
   final _service = SupabaseService.fromInitialized();
   List<CalendarEntry> _entries = [];
+  DateTime _focusedDay = DateTime.now();
+  DateTime _selectedDay = DateTime.now();
+  _CalendarDisplay _display = _CalendarDisplay.month;
   bool _isLoading = true;
   String? _error;
 
@@ -152,9 +158,159 @@ class _CalendarViewState extends State<CalendarView> {
     );
   }
 
+  List<CalendarEntry> _entriesOn(DateTime day) =>
+      _entries.where((entry) => isSameDay(entry.dateTime, day)).toList()
+        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
+  void _selectDisplay(_CalendarDisplay display) {
+    setState(() => _display = display);
+  }
+
+  Widget _buildCalendar() {
+    if (_display == _CalendarDisplay.day) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'Vorheriger Tag',
+              onPressed: () => setState(() {
+                _selectedDay = _selectedDay.subtract(const Duration(days: 1));
+                _focusedDay = _selectedDay;
+              }),
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Expanded(
+              child: Text(
+                DateFormat('EEEE, d. MMMM yyyy', 'de_DE').format(_selectedDay),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Nächster Tag',
+              onPressed: () => setState(() {
+                _selectedDay = _selectedDay.add(const Duration(days: 1));
+                _focusedDay = _selectedDay;
+              }),
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return TableCalendar<CalendarEntry>(
+      locale: 'de_DE',
+      firstDay: DateTime(2000),
+      lastDay: DateTime(2100),
+      focusedDay: _focusedDay,
+      calendarFormat: _display == _CalendarDisplay.month
+          ? CalendarFormat.month
+          : CalendarFormat.week,
+      startingDayOfWeek: StartingDayOfWeek.monday,
+      availableCalendarFormats: const {
+        CalendarFormat.month: 'Monat',
+        CalendarFormat.week: 'Woche',
+      },
+      selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+      eventLoader: _entriesOn,
+      onDaySelected: (selectedDay, focusedDay) {
+        setState(() {
+          _selectedDay = selectedDay;
+          _focusedDay = focusedDay;
+        });
+      },
+      onPageChanged: (focusedDay) => _focusedDay = focusedDay,
+      calendarStyle: CalendarStyle(
+        markerDecoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          shape: BoxShape.circle,
+        ),
+        todayDecoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.35),
+          shape: BoxShape.circle,
+        ),
+        selectedDecoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          shape: BoxShape.circle,
+        ),
+      ),
+      headerStyle: const HeaderStyle(
+        formatButtonVisible: false,
+        titleCentered: true,
+      ),
+    );
+  }
+
+  Widget _buildSelectedDayEntries() {
+    final entries = _entriesOn(_selectedDay);
+    final dateFormat = DateFormat('HH:mm');
+    if (entries.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        children: [
+          const SizedBox(height: 24),
+          Icon(
+            Icons.event_available_outlined,
+            size: 42,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              'Keine Einträge für diesen Tag.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+        ],
+      );
+    }
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+      itemCount: entries.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        return Card(
+          child: ListTile(
+            leading: Checkbox(
+              value: entry.erledigt,
+              onChanged: (value) => _toggleDone(entry, value ?? false),
+            ),
+            title: Text(
+              entry.titel,
+              style: entry.erledigt
+                  ? const TextStyle(decoration: TextDecoration.lineThrough)
+                  : null,
+            ),
+            subtitle: Text(
+              '${entry.typ == CalendarEntryType.task ? 'Aufgabe' : 'Termin'} · ${dateFormat.format(entry.dateTime)}',
+            ),
+            trailing: Wrap(
+              children: [
+                IconButton(
+                  tooltip: 'Bearbeiten',
+                  onPressed: () => _editEntry(entry),
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+                IconButton(
+                  tooltip: 'Löschen',
+                  onPressed: () => _deleteEntry(entry),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd.MM.yyyy · HH:mm');
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kalender'),
@@ -205,56 +361,43 @@ class _CalendarViewState extends State<CalendarView> {
                     ),
                   ),
                 )
-              : _entries.isEmpty
-                  ? const Center(
-                      child:
-                          Text('Noch keine Aufgaben oder Termine eingetragen.'),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                        itemCount: _entries.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final entry = _entries[index];
-                          return Card(
-                            child: ListTile(
-                              leading: Checkbox(
-                                value: entry.erledigt,
-                                onChanged: (value) =>
-                                    _toggleDone(entry, value ?? false),
-                              ),
-                              title: Text(
-                                entry.titel,
-                                style: entry.erledigt
-                                    ? const TextStyle(
-                                        decoration: TextDecoration.lineThrough,
-                                      )
-                                    : null,
-                              ),
-                              subtitle: Text(
-                                '${entry.typ == CalendarEntryType.task ? 'Aufgabe' : 'Termin'} · ${dateFormat.format(entry.dateTime)}',
-                              ),
-                              trailing: Wrap(
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Bearbeiten',
-                                    onPressed: () => _editEntry(entry),
-                                    icon: const Icon(Icons.edit_outlined),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Löschen',
-                                    onPressed: () => _deleteEntry(entry),
-                                    icon: const Icon(Icons.delete_outline),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                      child: SegmentedButton<_CalendarDisplay>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _CalendarDisplay.month,
+                            label: Text('Monat'),
+                            icon: Icon(Icons.calendar_view_month),
+                          ),
+                          ButtonSegment(
+                            value: _CalendarDisplay.week,
+                            label: Text('Woche'),
+                            icon: Icon(Icons.calendar_view_week),
+                          ),
+                          ButtonSegment(
+                            value: _CalendarDisplay.day,
+                            label: Text('Tag'),
+                            icon: Icon(Icons.calendar_view_day),
+                          ),
+                        ],
+                        selected: {_display},
+                        onSelectionChanged: (selected) =>
+                            _selectDisplay(selected.first),
                       ),
                     ),
+                    _buildCalendar(),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: _load,
+                        child: _buildSelectedDayEntries(),
+                      ),
+                    ),
+                  ],
+                ),
     );
   }
 }

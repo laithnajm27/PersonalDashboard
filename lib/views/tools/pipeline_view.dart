@@ -16,6 +16,8 @@ class _PipelineViewState extends State<PipelineView> {
   final _service = SupabaseService.fromInitialized();
   List<Customer> _customers = [];
   List<Project> _projects = [];
+  String _statusFilter = 'Alle';
+  bool _staleInProgressOnly = false;
   bool _isLoading = true;
   String? _error;
 
@@ -161,23 +163,78 @@ class _PipelineViewState extends State<PipelineView> {
                         final width = (constraints.maxWidth - 48) / 3;
                         final columnWidth =
                             width.clamp(270.0, 380.0).toDouble();
-                        return SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (var index = 0;
-                                  index < _statuses.length;
-                                  index++) ...[
-                                if (index > 0) const SizedBox(width: 14),
-                                SizedBox(
-                                  width: columnWidth,
-                                  child: _buildColumn(_statuses[index]),
+                        return Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                              child: Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: constraints.maxWidth < 430
+                                        ? constraints.maxWidth - 32
+                                        : 220,
+                                    child: DropdownButtonFormField<String>(
+                                      value: _statusFilter,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Statusfilter',
+                                        isDense: true,
+                                      ),
+                                      items: [
+                                        const DropdownMenuItem(
+                                          value: 'Alle',
+                                          child: Text('Alle Status'),
+                                        ),
+                                        for (final status in _statuses)
+                                          DropdownMenuItem(
+                                            value: status,
+                                            child: Text(status),
+                                          ),
+                                      ],
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setState(() => _statusFilter = value);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  FilterChip(
+                                    selected: _staleInProgressOnly,
+                                    avatar: const Icon(Icons.schedule),
+                                    label: const Text(
+                                      'In Arbeit > 14 Tage',
+                                    ),
+                                    onSelected: (selected) => setState(
+                                      () => _staleInProgressOnly = selected,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    for (var index = 0;
+                                        index < _statuses.length;
+                                        index++) ...[
+                                      if (index > 0) const SizedBox(width: 14),
+                                      SizedBox(
+                                        width: columnWidth,
+                                        child: _buildColumn(_statuses[index]),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              ],
-                            ],
-                          ),
+                              ),
+                            ),
+                          ],
                         );
                       },
                     ),
@@ -185,8 +242,24 @@ class _PipelineViewState extends State<PipelineView> {
   }
 
   Widget _buildColumn(String status) {
-    final projects =
-        _projects.where((project) => project.status == status).toList();
+    final cutoff = DateTime.now().subtract(const Duration(days: 14));
+    final projects = _projects.where((project) {
+      if (project.status != status) {
+        return false;
+      }
+      if (_statusFilter != 'Alle' && project.status != _statusFilter) {
+        return false;
+      }
+      if (_staleInProgressOnly) {
+        final changedAt = project.statusUpdatedAt;
+        if (project.status != 'In Arbeit' ||
+            changedAt == null ||
+            !changedAt.isBefore(cutoff)) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),

@@ -27,6 +27,7 @@ class Project {
     required this.titel,
     this.projektTyp = ProjectType.foto,
     this.status = 'Offen',
+    this.statusUpdatedAt,
     this.shotlistDaten = const [],
   });
 
@@ -35,6 +36,7 @@ class Project {
   final String titel;
   final ProjectType projektTyp;
   final String status;
+  final DateTime? statusUpdatedAt;
   final List<Shotlist> shotlistDaten;
 
   factory Project.fromJson(Map<String, dynamic> json) {
@@ -51,6 +53,9 @@ class Project {
       titel: title,
       projektTyp: ProjectTypeLabel.fromJson(json['projekt_typ']),
       status: json['status'] as String,
+      statusUpdatedAt: json['status_updated_at'] is String
+          ? DateTime.tryParse(json['status_updated_at'] as String)?.toLocal()
+          : null,
       shotlistDaten: rawShotlist
           .whereType<Map<String, dynamic>>()
           .map(Shotlist.fromJson)
@@ -64,6 +69,8 @@ class Project {
         'titel': titel,
         'projekt_typ': projektTyp.name,
         'status': status,
+        if (statusUpdatedAt != null)
+          'status_updated_at': statusUpdatedAt!.toUtc().toIso8601String(),
         'shotlist_daten': shotlistDaten.map((item) => item.toJson()).toList(),
       };
 }

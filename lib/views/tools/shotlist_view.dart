@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 
+import '../../models/workspace.dart';
 import '../../models/project.dart';
 import '../../models/shotlist.dart';
+import '../../services/pdf_export_service.dart';
 import '../../services/supabase_service.dart';
 
 class ShotlistView extends StatefulWidget {
@@ -14,6 +17,7 @@ class ShotlistView extends StatefulWidget {
 class _ShotlistViewState extends State<ShotlistView> {
   final _service = SupabaseService.fromInitialized();
   List<Project> _projects = [];
+  List<EquipmentItem> _equipment = [];
   String? _selectedProjectId;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -40,7 +44,12 @@ class _ShotlistViewState extends State<ShotlistView> {
       _error = null;
     });
     try {
-      _projects = await _service.getProjects();
+      final results = await Future.wait([
+        _service.getProjects(),
+        _service.getEquipment(),
+      ]);
+      _projects = results[0] as List<Project>;
+      _equipment = results[1] as List<EquipmentItem>;
       if (!_projects.any((project) => project.id == _selectedProjectId)) {
         _selectedProjectId = _projects.isEmpty ? null : _projects.first.id;
       }
@@ -57,6 +66,7 @@ class _ShotlistViewState extends State<ShotlistView> {
     final edited = await showDialog<Shotlist>(
       context: context,
       builder: (_) => _ShotEditorDialog(
+        equipment: _equipment,
         shot: original ??
             Shotlist(
               szeneNummer: (_selectedProject?.shotlistDaten.length ?? 0) + 1,
@@ -89,12 +99,43 @@ class _ShotlistViewState extends State<ShotlistView> {
             beschreibung: item.beschreibung,
             audioSfx: item.audioSfx,
             istErledigt: completed,
+            equipmentIds: item.equipmentIds,
           )
         else
           item,
     ];
     await _save(entries);
   }
+
+  Future<void> _exportPdf() async {
+    final project = _selectedProject;
+    if (project == null) {
+      return;
+    }
+    try {
+      final bytes = await PdfExportService.shotlist(
+        project: project,
+        shots: project.shotlistDaten,
+        equipment: _equipment,
+      );
+      final filename =
+          'shotlist-${project.titel.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-')}.pdf';
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF konnte nicht erstellt werden: $error')),
+        );
+      }
+    }
+  }
+
+  String _equipmentNames(Shotlist shot) => _equipment
+      .where(
+        (item) => item.id != null && shot.equipmentIds.contains(item.id),
+      )
+      .map((item) => item.name)
+      .join(', ');
 
   Future<void> _deleteScene(Shotlist shot) async {
     final entries =
@@ -139,6 +180,12 @@ class _ShotlistViewState extends State<ShotlistView> {
       appBar: AppBar(
         title: const Text('Manuelle Shotlist'),
         actions: [
+          if (project != null)
+            IconButton(
+              tooltip: 'Shotlist als PDF exportieren',
+              onPressed: _isSaving ? null : _exportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+            ),
           if (_isSaving)
             const Padding(
               padding: EdgeInsets.all(16),
@@ -226,6 +273,7 @@ class _ShotlistViewState extends State<ShotlistView> {
                                             label: Text('Kamerabewegung')),
                                         DataColumn(label: Text('Beschreibung')),
                                         DataColumn(label: Text('Audio/SFX')),
+                                        DataColumn(label: Text('Equipment')),
                                         DataColumn(label: Text('Erledigt')),
                                         DataColumn(label: Text('Aktionen')),
                                       ],
@@ -262,6 +310,20 @@ class _ShotlistViewState extends State<ShotlistView> {
                                               DataCell(
                                                 Text(shot.audioSfx),
                                                 onTap: () => _editScene(shot),
+                                              ),
+                                              DataCell(
+                                                ConstrainedBox(
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                    maxWidth: 180,
+                                                  ),
+                                                  child: Text(
+                                                    _equipmentNames(shot),
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
                                               ),
                                               DataCell(
                                                 Checkbox(
@@ -315,9 +377,13 @@ class _ShotlistViewState extends State<ShotlistView> {
 }
 
 class _ShotEditorDialog extends StatefulWidget {
-  const _ShotEditorDialog({required this.shot});
+  const _ShotEditorDialog({
+    required this.shot,
+    required this.equipment,
+  });
 
   final Shotlist shot;
+  final List<EquipmentItem> equipment;
 
   @override
   State<_ShotEditorDialog> createState() => _ShotEditorDialogState();
@@ -330,6 +396,7 @@ class _ShotEditorDialogState extends State<_ShotEditorDialog> {
   late final TextEditingController _movement;
   late final TextEditingController _description;
   late final TextEditingController _audio;
+  late Set<String> _equipmentIds;
 
   @override
   void initState() {
@@ -339,6 +406,7 @@ class _ShotEditorDialogState extends State<_ShotEditorDialog> {
     _movement = TextEditingController(text: widget.shot.kameraBewegung);
     _description = TextEditingController(text: widget.shot.beschreibung);
     _audio = TextEditingController(text: widget.shot.audioSfx);
+    _equipmentIds = widget.shot.equipmentIds.toSet();
   }
 
   @override
@@ -364,6 +432,7 @@ class _ShotEditorDialogState extends State<_ShotEditorDialog> {
         beschreibung: _description.text.trim(),
         audioSfx: _audio.text.trim(),
         istErledigt: widget.shot.istErledigt,
+        equipmentIds: _equipmentIds.toList(),
       ),
     );
   }
@@ -415,6 +484,45 @@ class _ShotEditorDialogState extends State<_ShotEditorDialog> {
                   controller: _audio,
                   decoration: const InputDecoration(labelText: 'Audio / SFX'),
                 ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Equipment',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                if (widget.equipment.isEmpty)
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Lege Equipment zuerst in den Einstellungen an.',
+                      ),
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final item in widget.equipment)
+                        FilterChip(
+                          label: Text(item.name),
+                          selected: _equipmentIds.contains(item.id),
+                          onSelected: item.id == null
+                              ? null
+                              : (selected) => setState(() {
+                                    if (selected) {
+                                      _equipmentIds.add(item.id!);
+                                    } else {
+                                      _equipmentIds.remove(item.id);
+                                    }
+                                  }),
+                        ),
+                    ],
+                  ),
               ],
             ),
           ),

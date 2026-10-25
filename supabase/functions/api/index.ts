@@ -202,7 +202,7 @@ async function takeOAuthState(admin: SupabaseClient, state: string) {
 
 async function exchangeAuthorizationCode(code: string) {
   const redirectUri = requiredEnv("META_OAUTH_REDIRECT_URI");
-  const appId = requiredEnv("META_APP_ID");
+  const appId = requiredEnv("META_INSTAGRAM_APP_ID");
   const appSecret = requiredEnv("META_APP_SECRET");
 
   const shortLivedForm = new URLSearchParams({
@@ -317,8 +317,28 @@ async function startInstagramOAuth(
   admin: SupabaseClient,
   ownerId: string,
 ) {
-  const appId = requiredEnv("META_APP_ID");
+  const appId = requiredEnv("META_INSTAGRAM_APP_ID");
+  if (!/^\d+$/.test(appId)) {
+    throw new Error(
+      "META_INSTAGRAM_APP_ID muss die numerische Instagram App ID aus den Business-Login-Einstellungen enthalten (nicht die Facebook App ID).",
+    );
+  }
   const redirectUri = requiredEnv("META_OAUTH_REDIRECT_URI");
+  const supabaseUrl = new URL(requiredEnv("SUPABASE_URL"));
+  const expectedRedirect = new URL("/functions/v1/api", supabaseUrl);
+  const parsedRedirect = new URL(redirectUri);
+  if (
+    supabaseUrl.protocol !== "https:" ||
+    parsedRedirect.protocol !== "https:" ||
+    parsedRedirect.origin !== expectedRedirect.origin ||
+    parsedRedirect.pathname !== expectedRedirect.pathname ||
+    parsedRedirect.search ||
+    parsedRedirect.hash
+  ) {
+    throw new Error(
+      `META_OAUTH_REDIRECT_URI muss exakt ${expectedRedirect.toString()} entsprechen.`,
+    );
+  }
   const stateBytes = crypto.getRandomValues(new Uint8Array(32));
   const state = toBase64Url(stateBytes);
   const stateHash = await hashState(state);
@@ -348,13 +368,39 @@ async function startInstagramOAuth(
     throw new Error("Instagram-Anmeldung konnte nicht gestartet werden.");
   }
 
-  const authorizationUrl = new URL("https://www.instagram.com/oauth/authorize");
+  const configuredEmbedUrl = Deno.env.get("META_OAUTH_EMBED_URL");
+  const authorizationUrl = new URL(
+    configuredEmbedUrl ?? "https://www.instagram.com/oauth/authorize",
+  );
+  if (
+    authorizationUrl.protocol !== "https:" ||
+    authorizationUrl.hostname !== "www.instagram.com" ||
+    authorizationUrl.pathname.replace(/\/$/, "") !== "/oauth/authorize"
+  ) {
+    throw new Error(
+      "META_OAUTH_EMBED_URL muss die Instagram Business Login Autorisierungs-URL enthalten.",
+    );
+  }
+  if (
+    configuredEmbedUrl &&
+    authorizationUrl.searchParams.get("client_id") !== appId
+  ) {
+    throw new Error(
+      "META_OAUTH_EMBED_URL muss zur konfigurierten Instagram App ID gehören.",
+    );
+  }
+  const embedRedirect = authorizationUrl.searchParams.get("redirect_uri");
+  if (embedRedirect && embedRedirect !== redirectUri) {
+    throw new Error(
+      "Die Redirect URI in META_OAUTH_EMBED_URL stimmt nicht mit META_OAUTH_REDIRECT_URI überein.",
+    );
+  }
   authorizationUrl.searchParams.set("client_id", appId);
   authorizationUrl.searchParams.set("redirect_uri", redirectUri);
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("scope", oauthScopes);
   authorizationUrl.searchParams.set("state", state);
-  authorizationUrl.searchParams.set("enable_fb_login", "false");
+  authorizationUrl.searchParams.set("enable_fb_login", "0");
   return authorizationUrl.toString();
 }
 

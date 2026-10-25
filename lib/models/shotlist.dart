@@ -6,6 +6,7 @@ class Shotlist {
     this.beschreibung = '',
     this.audioSfx = '',
     this.istErledigt = false,
+    this.equipmentIds = const [],
   });
 
   final int szeneNummer;
@@ -14,6 +15,7 @@ class Shotlist {
   final String beschreibung;
   final String audioSfx;
   final bool istErledigt;
+  final List<String> equipmentIds;
 
   factory Shotlist.fromJson(Map<String, dynamic> json) {
     final sceneNumber = json['szene_nummer'];
@@ -27,6 +29,9 @@ class Shotlist {
       beschreibung: json['beschreibung'] as String? ?? '',
       audioSfx: json['audio_sfx'] as String? ?? '',
       istErledigt: json['ist_erledigt'] as bool? ?? false,
+      equipmentIds: (json['equipment_ids'] as List<dynamic>? ?? const [])
+          .map((value) => value.toString())
+          .toList(),
     );
   }
 
@@ -37,5 +42,6 @@ class Shotlist {
         'beschreibung': beschreibung,
         'audio_sfx': audioSfx,
         'ist_erledigt': istErledigt,
+        'equipment_ids': equipmentIds,
       };
 }
