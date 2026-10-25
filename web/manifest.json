@@ -1,0 +1,9 @@
+{
+  "name": "Personal Dashboard",
+  "short_name": "Dashboard",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#101211",
+  "theme_color": "#101211",
+  "description": "Dein Leben auf einen Blick – das Dashboard für Foto- und Videografen."
+}
