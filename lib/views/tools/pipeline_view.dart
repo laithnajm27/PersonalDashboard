@@ -177,7 +177,7 @@ class _PipelineViewState extends State<PipelineView> {
                                         ? constraints.maxWidth - 32
                                         : 220,
                                     child: DropdownButtonFormField<String>(
-                                      value: _statusFilter,
+                                      initialValue: _statusFilter,
                                       decoration: const InputDecoration(
                                         labelText: 'Statusfilter',
                                         isDense: true,
@@ -421,7 +421,7 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
-                value: _customerId,
+                initialValue: _customerId,
                 decoration: const InputDecoration(labelText: 'Kunde'),
                 items: [
                   for (final customer in customersWithIds)
@@ -438,7 +438,7 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<ProjectType>(
-                value: _type,
+                initialValue: _type,
                 decoration: const InputDecoration(labelText: 'Projekttyp'),
                 items: [
                   for (final type in ProjectType.values)

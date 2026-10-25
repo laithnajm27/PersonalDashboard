@@ -349,7 +349,7 @@ class _InvoiceDialogState extends State<_InvoiceDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<InvoiceDocumentType>(
-                  value: _type,
+                  initialValue: _type,
                   decoration: const InputDecoration(labelText: 'Dokumenttyp'),
                   items: const [
                     DropdownMenuItem(

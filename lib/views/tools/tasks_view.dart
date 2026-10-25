@@ -325,7 +325,7 @@ class _TaskDialogState extends State<_TaskDialog> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<TaskStatus>(
-                    value: _status,
+                    initialValue: _status,
                     decoration: const InputDecoration(labelText: 'Status'),
                     items: const [
                       DropdownMenuItem(
@@ -349,7 +349,7 @@ class _TaskDialogState extends State<_TaskDialog> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<TaskPriority>(
-                    value: _priority,
+                    initialValue: _priority,
                     decoration: const InputDecoration(labelText: 'Priorität'),
                     items: const [
                       DropdownMenuItem(

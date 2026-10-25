@@ -226,7 +226,7 @@ class _ShotlistViewState extends State<ShotlistView> {
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                           child: DropdownButtonFormField<String>(
-                            value: _selectedProjectId,
+                            initialValue: _selectedProjectId,
                             decoration:
                                 const InputDecoration(labelText: 'Projekt'),
                             items: [

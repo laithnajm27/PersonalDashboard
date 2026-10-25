@@ -40,7 +40,7 @@ class PersonalDashboardApp extends StatelessWidget {
       ),
       scaffoldBackgroundColor:
           isDark ? const Color(0xFF101211) : const Color(0xFFF4F4F1),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: isDark ? const Color(0xFF1B1F1D) : Colors.white,
         margin: EdgeInsets.zero,
       ),

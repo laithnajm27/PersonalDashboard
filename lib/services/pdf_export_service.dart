@@ -45,7 +45,7 @@ class PdfExportService {
             children: [
               pw.Text(
                 'PERSONAL DASHBOARD',
-                style: pw.TextStyle(
+                style: const pw.TextStyle(
                   fontSize: 9,
                   fontWeight: pw.FontWeight.bold,
                   letterSpacing: 1.2,
@@ -62,7 +62,7 @@ class PdfExportService {
         build: (context) => [
           pw.Text(
             'Shotlist',
-            style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+            style: const pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
           pw.Text(
@@ -100,7 +100,7 @@ class PdfExportService {
                     shot.istErledigt ? 'Erledigt' : 'Offen',
                   ],
               ],
-              headerStyle: pw.TextStyle(
+              headerStyle: const pw.TextStyle(
                 fontWeight: pw.FontWeight.bold,
                 color: PdfColors.white,
                 fontSize: 8,
@@ -160,7 +160,7 @@ class PdfExportService {
           children: [
             pw.Text(
               supplierName.toUpperCase(),
-              style: pw.TextStyle(
+              style: const pw.TextStyle(
                 fontSize: 9,
                 fontWeight: pw.FontWeight.bold,
                 color: PdfColors.grey700,
@@ -186,7 +186,7 @@ class PdfExportService {
                     pw.SizedBox(height: 8),
                     pw.Text(
                       draft.customerName,
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         fontSize: 12,
                         fontWeight: pw.FontWeight.bold,
                       ),
@@ -209,7 +209,7 @@ class PdfExportService {
                     pw.SizedBox(height: 8),
                     pw.Text(
                       documentNumber,
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         fontSize: 19,
                         fontWeight: pw.FontWeight.bold,
                       ),
@@ -240,7 +240,7 @@ class PdfExportService {
                   _money.format(line.total),
                 ],
             ],
-            headerStyle: pw.TextStyle(
+            headerStyle: const pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
               fontSize: 9,
             ),
@@ -289,7 +289,7 @@ class PdfExportService {
               decoration: const pw.BoxDecoration(color: PdfColors.grey100),
               child: pw.Text(
                 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.',
-                style: pw.TextStyle(
+                style: const pw.TextStyle(
                   fontSize: 10,
                   fontWeight: pw.FontWeight.bold,
                 ),
@@ -317,7 +317,7 @@ class PdfExportService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(supplierName,
-                        style: pw.TextStyle(
+                        style: const pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 9)),
                     if (supplierAddress.isNotEmpty)
                       pw.Text(supplierAddress,
@@ -392,7 +392,7 @@ class PdfExportService {
         ),
       );
 
-  static final _labelStyle = pw.TextStyle(
+  static const _labelStyle = pw.TextStyle(
     fontSize: 8,
     fontWeight: pw.FontWeight.bold,
     letterSpacing: 1,

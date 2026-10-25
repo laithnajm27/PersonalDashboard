@@ -228,7 +228,7 @@ class _CalendarViewState extends State<CalendarView> {
           shape: BoxShape.circle,
         ),
         todayDecoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.35),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35),
           shape: BoxShape.circle,
         ),
         selectedDecoration: BoxDecoration(
@@ -508,7 +508,7 @@ class _CalendarEntryDialogState extends State<_CalendarEntryDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<CalendarEntryType>(
-                value: _type,
+                initialValue: _type,
                 decoration: const InputDecoration(labelText: 'Typ'),
                 items: const [
                   DropdownMenuItem(
