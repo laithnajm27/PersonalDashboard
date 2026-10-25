@@ -22,7 +22,10 @@ class SupabaseService {
     required String url,
     required String anonKey,
   }) async {
-    await Supabase.initialize(url: url, anonKey: anonKey);
+    await Supabase.initialize(
+      url: url,
+      publishableKey: anonKey,
+    );
   }
 
   Future<List<Customer>> getCustomers() async {
