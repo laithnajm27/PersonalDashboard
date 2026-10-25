@@ -92,7 +92,7 @@ void main() {
         customerAddress: 'Musterstraße 1',
         issueDate: DateTime(2026, 10, 25),
         lines: [
-          InvoiceLine(
+          const InvoiceLine(
             description: 'Fotoauftrag',
             quantity: 2,
             unitPrice: 12.349,

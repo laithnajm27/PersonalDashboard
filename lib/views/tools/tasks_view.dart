@@ -273,12 +273,18 @@ class _TaskDialogState extends State<_TaskDialog> {
     if (date == null) {
       return;
     }
+    if (!mounted) {
+      return;
+    }
     final time = await showTimePicker(
       context: context,
       initialTime: _dueAt == null
           ? TimeOfDay.fromDateTime(now)
           : TimeOfDay.fromDateTime(_dueAt!),
     );
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _dueAt = DateTime(
         date.year,
