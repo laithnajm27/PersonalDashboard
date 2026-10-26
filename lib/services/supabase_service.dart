@@ -128,9 +128,13 @@ class SupabaseService {
     await _client.from('equipment').delete().eq('id', id);
   }
 
-  Future<List<DashboardTask>> getTasks() async {
-    final rows =
-        await _client.from('tasks').select().order('due_at', nullsFirst: false);
+  Future<List<DashboardTask>> getTasks({String? projectId}) async {
+    final query = _client.from('tasks').select();
+    final rows = projectId == null
+        ? await query.order('due_at', nullsFirst: false)
+        : await query
+            .eq('project_id', projectId)
+            .order('due_at', nullsFirst: false);
     return rows.map((row) => DashboardTask.fromJson(row)).toList();
   }
 
@@ -247,6 +251,31 @@ class SupabaseService {
 
   Future<void> deleteProject(String id) async {
     await _client.from(projectsTable).delete().eq('id', id);
+  }
+
+  Future<List<ProjectLink>> getProjectLinks(String projectId) async {
+    final rows = await _client
+        .from('project_links')
+        .select()
+        .eq('project_id', projectId)
+        .order('created_at');
+    return rows.map((row) => ProjectLink.fromJson(row)).toList();
+  }
+
+  Future<ProjectLink> saveProjectLink(ProjectLink link) async {
+    final values = link.toJson(includeId: false);
+    final query = link.id == null
+        ? _client.from('project_links').insert(values)
+        : _client
+            .from('project_links')
+            .update(values)
+            .eq('id', _requireId(link.id, 'projectLink.id'));
+    final row = await query.select().single();
+    return ProjectLink.fromJson(row);
+  }
+
+  Future<void> deleteProjectLink(String id) async {
+    await _client.from('project_links').delete().eq('id', id);
   }
 
   Future<List<Shotlist>> getManualShotlist(String projectId) async {

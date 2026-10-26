@@ -8,7 +8,9 @@ import '../../services/pdf_export_service.dart';
 import '../../services/supabase_service.dart';
 
 class ShotlistView extends StatefulWidget {
-  const ShotlistView({super.key});
+  const ShotlistView({super.key, this.initialProjectId});
+
+  final String? initialProjectId;
 
   @override
   State<ShotlistView> createState() => _ShotlistViewState();
@@ -35,6 +37,7 @@ class _ShotlistViewState extends State<ShotlistView> {
   @override
   void initState() {
     super.initState();
+    _selectedProjectId = widget.initialProjectId;
     _load();
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/workspace.dart';
+import '../../models/project.dart';
 import '../../services/supabase_service.dart';
 
 class TasksView extends StatefulWidget {
@@ -14,6 +15,7 @@ class TasksView extends StatefulWidget {
 class _TasksViewState extends State<TasksView> {
   final _service = SupabaseService.fromInitialized();
   List<DashboardTask> _tasks = [];
+  List<Project> _projects = [];
   bool _loading = true;
   String? _error;
   TaskStatus? _filter;
@@ -30,7 +32,12 @@ class _TasksViewState extends State<TasksView> {
       _error = null;
     });
     try {
-      _tasks = await _service.getTasks();
+      final results = await Future.wait([
+        _service.getTasks(),
+        _service.getProjects(),
+      ]);
+      _tasks = results[0] as List<DashboardTask>;
+      _projects = results[1] as List<Project>;
     } catch (error) {
       _error = 'Aufgaben konnten nicht geladen werden: $error';
     } finally {
@@ -43,7 +50,7 @@ class _TasksViewState extends State<TasksView> {
   Future<void> _edit([DashboardTask? task]) async {
     final edited = await showDialog<DashboardTask>(
       context: context,
-      builder: (_) => _TaskDialog(task: task),
+      builder: (_) => _TaskDialog(task: task, projects: _projects),
     );
     if (edited == null) {
       return;
@@ -70,6 +77,7 @@ class _TasksViewState extends State<TasksView> {
           dueAt: task.dueAt,
           completedAt:
               status == TaskStatus.done ? DateTime.now() : task.completedAt,
+          projectId: task.projectId,
         ),
       );
       await _load();
@@ -171,6 +179,8 @@ class _TasksViewState extends State<TasksView> {
                                   if (task.dueAt != null)
                                     DateFormat('dd.MM.yyyy HH:mm')
                                         .format(task.dueAt!),
+                                  if (task.projectId != null)
+                                    _projectName(task.projectId!),
                                   'Priorität: ${_priorityName(task.priority)}',
                                 ].join(' · '),
                               ),
@@ -226,12 +236,22 @@ class _TasksViewState extends State<TasksView> {
         TaskPriority.normal => 'Normal',
         TaskPriority.high => 'Hoch',
       };
+
+  String _projectName(String projectId) {
+    for (final project in _projects) {
+      if (project.id == projectId) {
+        return project.titel;
+      }
+    }
+    return 'Projekt';
+  }
 }
 
 class _TaskDialog extends StatefulWidget {
-  const _TaskDialog({this.task});
+  const _TaskDialog({this.task, required this.projects});
 
   final DashboardTask? task;
+  final List<Project> projects;
 
   @override
   State<_TaskDialog> createState() => _TaskDialogState();
@@ -243,6 +263,7 @@ class _TaskDialogState extends State<_TaskDialog> {
   late final TextEditingController _description;
   late TaskStatus _status;
   late TaskPriority _priority;
+  String? _projectId;
   DateTime? _dueAt;
 
   @override
@@ -252,6 +273,11 @@ class _TaskDialogState extends State<_TaskDialog> {
     _description = TextEditingController(text: widget.task?.description ?? '');
     _status = widget.task?.status ?? TaskStatus.open;
     _priority = widget.task?.priority ?? TaskPriority.normal;
+    _projectId = widget.projects.any(
+      (project) => project.id == widget.task?.projectId,
+    )
+        ? widget.task?.projectId
+        : null;
     _dueAt = widget.task?.dueAt;
   }
 
@@ -322,6 +348,25 @@ class _TaskDialogState extends State<_TaskDialog> {
                     maxLines: 3,
                     decoration:
                         const InputDecoration(labelText: 'Beschreibung'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: _projectId,
+                    decoration:
+                        const InputDecoration(labelText: 'Projekt (optional)'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Kein Projekt'),
+                      ),
+                      for (final project in widget.projects)
+                        if (project.id != null)
+                          DropdownMenuItem<String?>(
+                            value: project.id,
+                            child: Text(project.titel),
+                          ),
+                    ],
+                    onChanged: (value) => setState(() => _projectId = value),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<TaskStatus>(
@@ -418,6 +463,7 @@ class _TaskDialogState extends State<_TaskDialog> {
                   priority: _priority,
                   dueAt: _dueAt,
                   completedAt: widget.task?.completedAt,
+                  projectId: _projectId,
                 ),
               );
             },

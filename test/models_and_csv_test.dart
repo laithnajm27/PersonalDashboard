@@ -65,12 +65,50 @@ void main() {
           decoded.shotlistDaten.single.beschreibung, 'Produkt im Sonnenlicht');
     });
 
+    test('round-trips project planning details', () {
+      final project = Project(
+        kundeId: 'customer-1',
+        titel: 'Portrait-Session',
+        beschreibung: 'Natürliches Licht und warme Farben',
+        ort: 'Hamburg',
+        startAt: DateTime.utc(2026, 11, 1),
+        dueAt: DateTime.utc(2026, 11, 14),
+        budget: 850,
+      );
+
+      final decoded = Project.fromJson(project.toJson());
+
+      expect(decoded.beschreibung, project.beschreibung);
+      expect(decoded.ort, project.ort);
+      expect(decoded.startAt?.toUtc(), project.startAt);
+      expect(decoded.dueAt?.toUtc(), project.dueAt);
+      expect(decoded.budget, 850);
+    });
+
     test('round-trips manually assigned equipment IDs', () {
       const shot = Shotlist(
         szeneNummer: 2,
         equipmentIds: ['camera-1', 'lens-2'],
       );
       expect(Shotlist.fromJson(shot.toJson()).equipmentIds, shot.equipmentIds);
+    });
+
+    test('maps project links and project-related tasks', () {
+      const link = ProjectLink(
+        id: 'link-1',
+        projectId: 'project-1',
+        title: 'Briefing',
+        url: 'https://example.com/briefing',
+        note: 'Aktuelle Fassung',
+      );
+      const task = DashboardTask(
+        id: 'task-1',
+        title: 'Angebot abstimmen',
+        projectId: 'project-1',
+      );
+
+      expect(ProjectLink.fromJson(link.toJson()).url, link.url);
+      expect(DashboardTask.fromJson(task.toJson()).projectId, 'project-1');
     });
   });
 

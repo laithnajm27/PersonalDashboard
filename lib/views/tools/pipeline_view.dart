@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/customer.dart';
 import '../../models/project.dart';
 import '../../services/supabase_service.dart';
+import 'project_detail_view.dart';
 
 class PipelineView extends StatefulWidget {
   const PipelineView({super.key});
@@ -75,6 +76,12 @@ class _PipelineViewState extends State<PipelineView> {
           titel: project.titel,
           projektTyp: project.projektTyp,
           status: status,
+          statusUpdatedAt: project.statusUpdatedAt,
+          beschreibung: project.beschreibung,
+          ort: project.ort,
+          startAt: project.startAt,
+          dueAt: project.dueAt,
+          budget: project.budget,
           shotlistDaten: project.shotlistDaten,
         ),
       );
@@ -121,6 +128,20 @@ class _PipelineViewState extends State<PipelineView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  Future<void> _openProject(Project project) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ProjectDetailView(
+          project: project,
+          customerName: _customerName(project.kundeId),
+        ),
+      ),
+    );
+    if (mounted) {
+      await _load();
+    }
   }
 
   IconData _typeIcon(ProjectType type) => switch (type) {
@@ -329,12 +350,32 @@ class _PipelineViewState extends State<PipelineView> {
                           '${project.projektTyp.label} · ${project.shotlistDaten.length} Szenen',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
+                        if (project.dueAt != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Abgabe: ${MaterialLocalizations.of(context).formatMediumDate(project.dueAt!)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                         Align(
                           alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: () => _deleteProject(project),
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            label: const Text('Löschen'),
+                          child: Wrap(
+                            alignment: WrapAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => _openProject(project),
+                                icon: const Icon(
+                                  Icons.folder_open_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Projekt öffnen'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => _deleteProject(project),
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                label: const Text('Löschen'),
+                              ),
+                            ],
                           ),
                         ),
                       ],

@@ -28,6 +28,7 @@ class DashboardTask {
     this.priority = TaskPriority.normal,
     this.dueAt,
     this.completedAt,
+    this.projectId,
   });
 
   final String? id;
@@ -37,6 +38,7 @@ class DashboardTask {
   final TaskPriority priority;
   final DateTime? dueAt;
   final DateTime? completedAt;
+  final String? projectId;
 
   factory DashboardTask.fromJson(Map<String, dynamic> json) {
     return DashboardTask(
@@ -47,6 +49,7 @@ class DashboardTask {
       priority: TaskPriority.values.byName(json['priority'] as String),
       dueAt: _parseDate(json['due_at']),
       completedAt: _parseDate(json['completed_at']),
+      projectId: json['project_id']?.toString(),
     );
   }
 
@@ -57,6 +60,7 @@ class DashboardTask {
         'status': status.databaseValue,
         'priority': priority.name,
         'due_at': dueAt?.toUtc().toIso8601String(),
+        'project_id': projectId,
         'completed_at': status == TaskStatus.done
             ? (completedAt ?? DateTime.now()).toUtc().toIso8601String()
             : null,
