@@ -74,6 +74,36 @@ class EdgeApi {
     return reply;
   }
 
+  Future<String> issueProjectGalleryLink(String galleryId) async {
+    final response = await _client.functions.invoke(
+      'api',
+      body: {
+        'action': 'project_gallery_issue_link',
+        'gallery_id': galleryId,
+      },
+    );
+    final data = _asJsonObject(response.data);
+    final value = data['share_url'];
+    final uri = value is String ? Uri.tryParse(value) : null;
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      throw const FormatException(
+        'Der Galerie-Link ist ungültig.',
+      );
+    }
+    return uri.toString();
+  }
+
+  Future<void> revokeProjectGalleryLink(String galleryId) async {
+    final response = await _client.functions.invoke(
+      'api',
+      body: {
+        'action': 'project_gallery_revoke_link',
+        'gallery_id': galleryId,
+      },
+    );
+    _asJsonObject(response.data);
+  }
+
   Map<String, dynamic> _asJsonObject(Object? value) {
     if (value is Map<String, dynamic>) {
       return value;

@@ -62,7 +62,8 @@ class PdfExportService {
         build: (context) => [
           pw.Text(
             'Shotlist',
-            style: const pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+            style: const pw.TextStyle(
+                fontSize: 24, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
           pw.Text(

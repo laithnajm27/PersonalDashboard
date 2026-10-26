@@ -67,6 +67,7 @@ void main() {
 
     test('round-trips project planning details', () {
       final project = Project(
+        id: 'project-2',
         kundeId: 'customer-1',
         titel: 'Portrait-Session',
         beschreibung: 'Natürliches Licht und warme Farben',
@@ -109,6 +110,28 @@ void main() {
 
       expect(ProjectLink.fromJson(link.toJson()).url, link.url);
       expect(DashboardTask.fromJson(task.toJson()).projectId, 'project-1');
+    });
+
+    test('round-trips private gallery metadata and media', () {
+      const gallery = ProjectGallery(
+        id: 'gallery-1',
+        projectId: 'project-1',
+        title: 'Sommerkampagne',
+        description: 'Danke für den schönen Auftrag!',
+        allowDownload: true,
+        isActive: true,
+      );
+      const media = ProjectGalleryMedia(
+        id: 'media-1',
+        galleryId: 'gallery-1',
+        title: 'Kampagnenfoto',
+        storagePath: 'owner/gallery/image.jpg',
+        mimeType: 'image/jpeg',
+        fileSize: 1024,
+      );
+
+      expect(ProjectGallery.fromJson(gallery.toJson()).allowDownload, isTrue);
+      expect(ProjectGalleryMedia.fromJson(media.toJson()).isVideo, isFalse);
     });
   });
 

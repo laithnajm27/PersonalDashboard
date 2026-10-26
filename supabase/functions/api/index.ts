@@ -579,8 +579,195 @@ async function assistantReply(
   return reply.trim();
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+async function issueProjectGalleryLink(
+  admin: SupabaseClient,
+  ownerId: string,
+  galleryId: string,
+) {
+  if (!/^[0-9a-f-]{36}$/i.test(galleryId)) {
+    throw new Error("Ungültige Galerie.");
+  }
+  const { data: gallery, error: findError } = await admin
+    .from("project_galleries")
+    .select("id")
+    .eq("id", galleryId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  if (findError || !gallery) {
+    throw new Error("Galerie wurde nicht gefunden.");
+  }
+
+  const token = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  const tokenHash = await hashState(token);
+  const { error } = await admin
+    .from("project_galleries")
+    .update({
+      share_token_hash: tokenHash,
+      is_active: true,
+    })
+    .eq("id", galleryId)
+    .eq("owner_id", ownerId);
+  if (error) {
+    throw new Error("Galerie-Link konnte nicht erstellt werden.");
+  }
+  const baseUrl = new URL("/functions/v1/api", requiredEnv("SUPABASE_URL"));
+  baseUrl.searchParams.set("gallery", token);
+  return baseUrl.toString();
+}
+
+async function revokeProjectGalleryLink(
+  admin: SupabaseClient,
+  ownerId: string,
+  galleryId: string,
+) {
+  if (!/^[0-9a-f-]{36}$/i.test(galleryId)) {
+    throw new Error("Ungültige Galerie.");
+  }
+  const { data, error } = await admin
+    .from("project_galleries")
+    .update({ share_token_hash: null, is_active: false })
+    .eq("id", galleryId)
+    .eq("owner_id", ownerId)
+    .select("id")
+    .maybeSingle();
+  if (error || !data) {
+    throw new Error("Galerie-Link konnte nicht widerrufen werden.");
+  }
+}
+
+async function publicGalleryResponse(token: string): Promise<Response> {
+  const notFound = () =>
+    new Response(
+      "<!doctype html><html lang=\"de\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Galerie nicht verfügbar</title><body><h1>Galerie nicht verfügbar</h1><p>Dieser Link ist ungültig oder wurde deaktiviert.</p></body></html>",
+      {
+        status: 404,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "no-referrer",
+        },
+      },
+    );
+
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) {
+    return notFound();
+  }
+  const admin = getAdminClient();
+  const tokenHash = await hashState(token);
+  const { data: gallery, error: galleryError } = await admin
+    .from("project_galleries")
+    .select("id,project_id,title,description,allow_download")
+    .eq("share_token_hash", tokenHash)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (galleryError) {
+    throw new Error("Galerie konnte nicht geladen werden.");
+  }
+  if (!gallery) {
+    return notFound();
+  }
+
+  const [{ data: project, error: projectError }, { data: media, error: mediaError }] =
+    await Promise.all([
+      admin.from("projects").select("titel").eq("id", gallery.project_id).single(),
+      admin
+        .from("project_gallery_media")
+        .select("title,storage_path,mime_type")
+        .eq("gallery_id", gallery.id)
+        .order("sort_order")
+        .order("created_at"),
+    ]);
+  if (projectError || mediaError || !project || !media) {
+    throw new Error("Galerie-Inhalte konnten nicht geladen werden.");
+  }
+
+  const storage = admin.storage.from("project-gallery");
+  const items = await Promise.all(media.map(async (item) => {
+    const { data, error } = await storage.createSignedUrl(item.storage_path, 3600);
+    if (error || !data?.signedUrl) {
+      throw new Error("Galerie-Medium konnte nicht bereitgestellt werden.");
+    }
+    const url = escapeHtml(data.signedUrl);
+    const title = escapeHtml(item.title);
+    const player = item.mime_type.startsWith("video/")
+      ? `<video controls playsinline preload="metadata" src="${url}"></video>`
+      : `<img src="${url}" alt="${title}" loading="lazy">`;
+    const download = gallery.allow_download
+      ? `<a class="download" href="${url}" target="_blank" rel="noopener noreferrer">Ansehen / speichern</a>`
+      : "";
+    return `<article class="item">${player}<div class="caption"><strong>${title}</strong>${download}</div></article>`;
+  }));
+
+  const title = escapeHtml(gallery.title);
+  const description = escapeHtml(gallery.description);
+  const projectTitle = escapeHtml(project.titel);
+  const storageOrigin = new URL(requiredEnv("SUPABASE_URL")).origin;
+  const html = `<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>${title}</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f3ef;color:#252926;font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:clamp(2rem,7vw,5rem) max(1.25rem,calc((100vw - 1200px)/2));background:#202522;color:#f7f7f4}
+.eyebrow{text-transform:uppercase;letter-spacing:.18em;font-size:.72rem;color:#bec7c0}.wrap{max-width:1200px;margin:0 auto;padding:2rem 1.25rem 4rem}
+h1{font-size:clamp(2rem,5vw,3.7rem);line-height:1.08;margin:.7rem 0 1rem;letter-spacing:-.04em}header p{max-width:760px;color:#d5dad5;margin:.45rem 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem}
+.item{margin:0;background:white;border:1px solid #e1e2dc;border-radius:14px;overflow:hidden;box-shadow:0 8px 26px #1d271b0b}
+.item img,.item video{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#dfe1dc}
+.caption{padding:.9rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center}.caption strong{font-weight:550}
+.download{color:#2b4336;text-decoration:none;font-size:.85rem;white-space:nowrap}.download:hover{text-decoration:underline}
+.empty{padding:3rem 1.5rem;text-align:center;border:1px dashed #b9beb8;border-radius:14px;color:#59615b}
+footer{text-align:center;color:#747b75;padding:1rem;font-size:.85rem}
+@media(max-width:520px){.caption{align-items:flex-start;flex-direction:column;gap:.35rem}}
+</style></head>
+<body><header><div class="eyebrow">Persönliche Kundengalerie · ${projectTitle}</div><h1>${title}</h1>${description ? `<p>${description}</p>` : ""}</header>
+<main class="wrap">${items.length ? `<section class="grid" aria-label="Galerie">${items.join("")}</section>` : `<div class="empty">Diese Galerie enthält noch keine Medien.</div>`}</main>
+<footer>Private Galerie · Erstellt mit Personal Dashboard</footer></body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store, max-age=0",
+      "Content-Security-Policy": `default-src 'none'; img-src ${storageOrigin} data:; media-src ${storageOrigin}; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+    },
+  });
+}
+
 Deno.serve(async (request: Request) => {
   const requestUrl = new URL(request.url);
+  const galleryToken = requestUrl.searchParams.get("gallery");
+  if (request.method === "GET" && galleryToken !== null) {
+    try {
+      return await publicGalleryResponse(galleryToken);
+    } catch (error) {
+      console.error(
+        "Public gallery request failed:",
+        error instanceof Error ? error.message : "unknown error",
+      );
+      return new Response("Galerie derzeit nicht verfügbar.", {
+        status: 503,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+  }
   if (request.method === "GET" && requestUrl.pathname.endsWith(oauthCallbackPath)) {
     return await handleOAuthCallback(request);
   }
@@ -656,6 +843,24 @@ Deno.serve(async (request: Request) => {
         insights,
       );
       return jsonResponse({ reply });
+    }
+    if (body.action === "project_gallery_issue_link") {
+      if (typeof body.gallery_id !== "string") {
+        return jsonResponse({ error: "Ungültige Galerie." }, 400);
+      }
+      const shareUrl = await issueProjectGalleryLink(
+        admin,
+        user.id,
+        body.gallery_id,
+      );
+      return jsonResponse({ share_url: shareUrl });
+    }
+    if (body.action === "project_gallery_revoke_link") {
+      if (typeof body.gallery_id !== "string") {
+        return jsonResponse({ error: "Ungültige Galerie." }, 400);
+      }
+      await revokeProjectGalleryLink(admin, user.id, body.gallery_id);
+      return jsonResponse({ revoked: true });
     }
     return jsonResponse({ error: "Unbekannte Aktion." }, 400);
   } catch (error) {

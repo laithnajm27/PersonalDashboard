@@ -141,6 +141,111 @@ class ProjectLink {
       };
 }
 
+class ProjectGallery {
+  const ProjectGallery({
+    this.id,
+    required this.projectId,
+    required this.title,
+    this.description = '',
+    this.allowDownload = false,
+    this.isActive = false,
+  });
+
+  final String? id;
+  final String projectId;
+  final String title;
+  final String description;
+  final bool allowDownload;
+  final bool isActive;
+
+  factory ProjectGallery.fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString();
+    final projectId = json['project_id']?.toString();
+    final title = json['title'];
+    if (id == null ||
+        projectId == null ||
+        title is! String ||
+        title.trim().isEmpty) {
+      throw const FormatException('Galerie ist unvollständig.');
+    }
+    return ProjectGallery(
+      id: id,
+      projectId: projectId,
+      title: title,
+      description: json['description'] as String? ?? '',
+      allowDownload: json['allow_download'] as bool? ?? false,
+      isActive: json['is_active'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson({bool includeId = true}) => {
+        if (includeId && id != null) 'id': id,
+        'project_id': projectId,
+        'title': title,
+        'description': description,
+        'allow_download': allowDownload,
+        'is_active': isActive,
+      };
+}
+
+class ProjectGalleryMedia {
+  const ProjectGalleryMedia({
+    this.id,
+    required this.galleryId,
+    required this.title,
+    required this.storagePath,
+    required this.mimeType,
+    required this.fileSize,
+    this.sortOrder = 0,
+  });
+
+  final String? id;
+  final String galleryId;
+  final String title;
+  final String storagePath;
+  final String mimeType;
+  final int fileSize;
+  final int sortOrder;
+
+  bool get isVideo => mimeType.startsWith('video/');
+
+  factory ProjectGalleryMedia.fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString();
+    final galleryId = json['gallery_id']?.toString();
+    final title = json['title'];
+    final storagePath = json['storage_path'];
+    final mimeType = json['mime_type'];
+    final fileSize = json['file_size'];
+    if (id == null ||
+        galleryId == null ||
+        title is! String ||
+        storagePath is! String ||
+        mimeType is! String ||
+        fileSize is! num) {
+      throw const FormatException('Galerie-Medium ist unvollständig.');
+    }
+    return ProjectGalleryMedia(
+      id: id,
+      galleryId: galleryId,
+      title: title,
+      storagePath: storagePath,
+      mimeType: mimeType,
+      fileSize: fileSize.toInt(),
+      sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson({bool includeId = true}) => {
+        if (includeId && id != null) 'id': id,
+        'gallery_id': galleryId,
+        'title': title,
+        'storage_path': storagePath,
+        'mime_type': mimeType,
+        'file_size': fileSize,
+        'sort_order': sortOrder,
+      };
+}
+
 DateTime? _parseProjectDate(Object? value) {
   if (value is! String) {
     return null;

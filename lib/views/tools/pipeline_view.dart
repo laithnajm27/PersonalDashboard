@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../models/customer.dart';
 import '../../models/project.dart';
@@ -50,16 +51,36 @@ class _PipelineViewState extends State<PipelineView> {
       _showMessage('Lege zuerst einen Kunden an.');
       return;
     }
-    final project = await showDialog<Project>(
+    final draft = await showDialog<_NewProjectDraft>(
       context: context,
       builder: (_) => _NewProjectDialog(customers: _customers),
     );
-    if (project == null) {
+    if (draft == null) {
       return;
     }
     try {
-      await _service.createProject(project);
+      final project = await _service.createProject(draft.project);
+      final linkTitle = draft.linkTitle?.trim() ?? '';
+      final linkUrl = draft.linkUrl?.trim() ?? '';
+      if (linkTitle.isNotEmpty && linkUrl.isNotEmpty && project.id != null) {
+        try {
+          await _service.saveProjectLink(
+            ProjectLink(
+              projectId: project.id!,
+              title: linkTitle,
+              url: linkUrl,
+              note: 'Beim Erstellen des Projekts hinzugefügt',
+            ),
+          );
+        } catch (error) {
+          if (mounted) {
+            _showMessage(
+                'Projekt erstellt, Link konnte nicht gespeichert werden: $error');
+          }
+        }
+      }
       await _load();
+      await _openProject(project);
     } catch (error) {
       if (mounted) {
         _showMessage('Projekt konnte nicht erstellt werden: $error');
@@ -372,7 +393,8 @@ class _PipelineViewState extends State<PipelineView> {
                               ),
                               TextButton.icon(
                                 onPressed: () => _deleteProject(project),
-                                icon: const Icon(Icons.delete_outline, size: 18),
+                                icon:
+                                    const Icon(Icons.delete_outline, size: 18),
                                 label: const Text('Löschen'),
                               ),
                             ],
@@ -410,8 +432,17 @@ class _NewProjectDialog extends StatefulWidget {
 class _NewProjectDialogState extends State<_NewProjectDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _locationController = TextEditingController();
+  final _budgetController = TextEditingController();
+  final _linkTitleController = TextEditingController();
+  final _linkUrlController = TextEditingController();
   late String _customerId;
   ProjectType _type = ProjectType.foto;
+  String _status = 'Offen';
+  DateTime? _startAt;
+  DateTime? _dueAt;
+  String? _dateError;
 
   @override
   void initState() {
@@ -422,19 +453,60 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
   @override
   void dispose() {
     _titleController.dispose();
+    _descriptionController.dispose();
+    _locationController.dispose();
+    _budgetController.dispose();
+    _linkTitleController.dispose();
+    _linkUrlController.dispose();
     super.dispose();
   }
+
+  Future<DateTime?> _pickDate(DateTime? selected) => showDatePicker(
+        context: context,
+        initialDate: selected ?? DateTime.now(),
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+      );
 
   void _save() {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (_startAt != null && _dueAt != null && _dueAt!.isBefore(_startAt!)) {
+      setState(() {
+        _dateError = 'Das Projektende darf nicht vor dem Start liegen.';
+      });
+      return;
+    }
+    _dateError = null;
+    final budgetText = _budgetController.text.trim().replaceAll(',', '.');
+    final budget = budgetText.isEmpty ? null : double.tryParse(budgetText);
+    if (budgetText.isNotEmpty &&
+        (budget == null || !budget.isFinite || budget < 0)) {
+      return;
+    }
+    final linkTitle = _linkTitleController.text.trim();
+    final linkUrl = _linkUrlController.text.trim();
+    if (linkTitle.isNotEmpty != linkUrl.isNotEmpty) {
+      _formKey.currentState!.validate();
+      return;
+    }
     Navigator.pop(
       context,
-      Project(
-        kundeId: _customerId,
-        titel: _titleController.text.trim(),
-        projektTyp: _type,
+      _NewProjectDraft(
+        project: Project(
+          kundeId: _customerId,
+          titel: _titleController.text.trim(),
+          projektTyp: _type,
+          status: _status,
+          beschreibung: _descriptionController.text.trim(),
+          ort: _locationController.text.trim(),
+          startAt: _startAt,
+          dueAt: _dueAt,
+          budget: budget,
+        ),
+        linkTitle: linkTitle.isEmpty ? null : linkTitle,
+        linkUrl: linkUrl.isEmpty ? null : linkUrl,
       ),
     );
   }
@@ -443,58 +515,200 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
   Widget build(BuildContext context) {
     final customersWithIds =
         widget.customers.where((customer) => customer.id != null).toList();
+    final dateFormat = DateFormat('dd.MM.yyyy');
     return AlertDialog(
       title: const Text('Neues Projekt'),
       content: SizedBox(
-        width: 440,
+        width: 520,
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _titleController,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Projekttitel'),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Bitte gib einen Titel ein.'
-                    : null,
-              ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                initialValue: _customerId,
-                decoration: const InputDecoration(labelText: 'Kunde'),
-                items: [
-                  for (final customer in customersWithIds)
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _titleController,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Projekttitel'),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Bitte gib einen Titel ein.'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _customerId,
+                  decoration: const InputDecoration(labelText: 'Kunde'),
+                  items: [
+                    for (final customer in customersWithIds)
+                      DropdownMenuItem(
+                        value: customer.id!,
+                        child: Text(customer.name),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _customerId = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<ProjectType>(
+                  initialValue: _type,
+                  decoration: const InputDecoration(labelText: 'Projekttyp'),
+                  items: [
+                    for (final type in ProjectType.values)
+                      DropdownMenuItem(
+                        value: type,
+                        child: Text(type.label),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _type = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _status,
+                  decoration: const InputDecoration(labelText: 'Startstatus'),
+                  items: const [
+                    DropdownMenuItem(value: 'Offen', child: Text('Offen')),
                     DropdownMenuItem(
-                      value: customer.id!,
-                      child: Text(customer.name),
+                      value: 'In Arbeit',
+                      child: Text('In Arbeit'),
                     ),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _customerId = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<ProjectType>(
-                initialValue: _type,
-                decoration: const InputDecoration(labelText: 'Projekttyp'),
-                items: [
-                  for (final type in ProjectType.values)
                     DropdownMenuItem(
-                      value: type,
-                      child: Text(type.label),
+                      value: 'Abgeschlossen',
+                      child: Text('Abgeschlossen'),
                     ),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _type = value);
-                  }
-                },
-              ),
-            ],
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _status = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descriptionController,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Briefing / Notizen',
+                    hintText: 'Ziele, Stil, Lieferumfang, Absprachen ...',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _locationController,
+                  decoration: const InputDecoration(labelText: 'Ort'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _budgetController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Budget (optional)',
+                    suffixText: '€',
+                  ),
+                  validator: (value) {
+                    final input = value?.trim().replaceAll(',', '.') ?? '';
+                    if (input.isEmpty) {
+                      return null;
+                    }
+                    final amount = double.tryParse(input);
+                    return amount == null || !amount.isFinite || amount < 0
+                        ? 'Bitte gib einen gültigen Betrag ein.'
+                        : null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                _ProjectDateRow(
+                  label: 'Projektstart',
+                  value: _startAt == null ? null : dateFormat.format(_startAt!),
+                  onPick: () async {
+                    final date = await _pickDate(_startAt);
+                    if (date != null) {
+                      setState(() => _startAt = date);
+                    }
+                  },
+                  onClear: _startAt == null
+                      ? null
+                      : () => setState(() => _startAt = null),
+                ),
+                _ProjectDateRow(
+                  label: 'Abgabe / Ende',
+                  value: _dueAt == null ? null : dateFormat.format(_dueAt!),
+                  onPick: () async {
+                    final date = await _pickDate(_dueAt);
+                    if (date != null) {
+                      setState(() => _dueAt = date);
+                    }
+                  },
+                  onClear: _dueAt == null
+                      ? null
+                      : () => setState(() => _dueAt = null),
+                ),
+                if (_dateError != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _dateError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Erster Projektlink (optional)',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _linkTitleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Linkname',
+                    hintText: 'z. B. Briefing oder Cloud-Ordner',
+                  ),
+                  validator: (value) {
+                    final hasTitle = value?.trim().isNotEmpty ?? false;
+                    final hasUrl = _linkUrlController.text.trim().isNotEmpty;
+                    return hasTitle != hasUrl
+                        ? 'Bitte Linkname und URL gemeinsam eintragen.'
+                        : null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _linkUrlController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'URL',
+                    hintText: 'https://...',
+                  ),
+                  validator: (value) {
+                    final url = value?.trim() ?? '';
+                    final hasTitle =
+                        _linkTitleController.text.trim().isNotEmpty;
+                    if (url.isEmpty && !hasTitle) {
+                      return null;
+                    }
+                    final uri = Uri.tryParse(url);
+                    return uri == null ||
+                            (uri.scheme != 'https' && uri.scheme != 'http') ||
+                            uri.host.isEmpty
+                        ? 'Bitte Linkname und gültige http(s)-URL angeben.'
+                        : null;
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -507,6 +721,54 @@ class _NewProjectDialogState extends State<_NewProjectDialog> {
       ],
     );
   }
+}
+
+class _NewProjectDraft {
+  const _NewProjectDraft({
+    required this.project,
+    this.linkTitle,
+    this.linkUrl,
+  });
+
+  final Project project;
+  final String? linkTitle;
+  final String? linkUrl;
+}
+
+class _ProjectDateRow extends StatelessWidget {
+  const _ProjectDateRow({
+    required this.label,
+    required this.value,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final String label;
+  final String? value;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(
+            child: Text(
+              value == null ? '$label: nicht festgelegt' : '$label: $value',
+            ),
+          ),
+          IconButton(
+            tooltip: label,
+            onPressed: onPick,
+            icon: const Icon(Icons.calendar_month_outlined),
+          ),
+          if (onClear != null)
+            IconButton(
+              tooltip: 'Datum entfernen',
+              onPressed: onClear,
+              icon: const Icon(Icons.clear),
+            ),
+        ],
+      );
 }
 
 class _PipelineError extends StatelessWidget {

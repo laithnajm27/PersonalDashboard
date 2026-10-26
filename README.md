@@ -42,11 +42,11 @@ Argumente oder GitHub Pages.
    ```
 
    Die Migrationen erstellen `customers`, `projects` und `calendar_entries`
-   sowie Profile, Equipment, Aufgaben, Ziele und das private Belegarchiv. Jede
-   Zeile gehört über `owner_id` genau einem angemeldeten Konto. RLS erzwingt die
-   Eigentümertrennung. `projects.shotlist_daten` ist JSONB und speichert
-   ausschließlich manuell gepflegte Szenen; sie werden nicht automatisch
-   erzeugt.
+   sowie Profile, Equipment, Aufgaben, Ziele, Projektlinks, Projektgalerien
+   und das private Belegarchiv. Jede Zeile gehört über `owner_id` genau einem
+   angemeldeten Konto. RLS erzwingt die Eigentümertrennung.
+   `projects.shotlist_daten` ist JSONB und speichert ausschließlich manuell
+   gepflegte Szenen; sie werden nicht automatisch erzeugt.
 3. In der Meta-App unter **Instagram → API setup with Instagram Login → Set up
    Instagram business login** richte Business Login ein:
 
@@ -163,6 +163,17 @@ Import und Export verwenden UTF-8 CSV mit Headern `typ,titel,date_time,erledigt`
 - **Next Up** zeigt offene Kalender- und Aufgabenpunkte der kommenden 14 Tage.
 - **Pipeline** bietet Statusfilter und einen Filter für Projekte, die länger
   als 14 Tage im Status „In Arbeit“ sind.
+- **Projektakte** speichert Briefing/Notizen, Kunden, Typ, Status, Ort, Zeitraum,
+  Budget, Links zu Briefings und Cloud-Ordnern, projektbezogene Aufgaben sowie
+  die vollständig manuelle Shotlist an einem Ort.
+- **Kundengalerie** pro Projekt: Fotos und Videos (JPG, PNG, WebP, GIF, MP4,
+  MOV, WebM; maximal 100 MB je Datei) werden in einem privaten Supabase-Storage-
+  Bucket gespeichert. Ein zufälliger, widerrufbarer Freigabe-Link öffnet eine
+  responsive Galerie ohne Kunden-Login. Medien bleiben privat; die Edge
+  Function prüft den geheimen Link und erstellt kurzlebige, signierte URLs.
+  Galerie-Titel, Begrüßung und Download-Schaltfläche sind einstellbar. Eine
+  Download-Schaltfläche auszublenden kann nicht verhindern, dass Empfänger
+  freigegebene Medien technisch speichern oder Bildschirmaufnahmen machen.
 - **Kalender** bietet Monats-, Wochen- und Tagesansicht sowie CSV-Import/Export.
 - **Shotlist** bleibt ausschließlich manuell; Equipment wird pro Szene
   ausgewählt und die Tabelle kann als PDF geteilt werden.
@@ -189,3 +200,25 @@ flutter test
 Es gibt bewusst weder Passwort-Reset-Logik noch UI dafür. Die Shotlist wird
 ausschließlich manuell erstellt, bearbeitet und am Set abgehakt; der
 KI-Assistent generiert keine Szenen.
+
+### Kundengalerie aktivieren
+
+Die Projekt-Migration erstellt den privaten Storage-Bucket `project-gallery`,
+die Tabellen für Galerien und Medien sowie die zugehörigen RLS- und Storage-
+Policies. Nach einem Push neuer Migrationen muss auch die vorhandene Edge
+Function `api` erneut bereitgestellt werden, damit sie öffentliche Galerie-
+Links sicher prüfen und HTML-Galerien ausliefern kann:
+
+```sh
+supabase db push
+supabase functions deploy api
+```
+
+In der Projektakte eine Galerie einrichten, Medien hochladen und **Link
+erstellen** auswählen. Der zufällige Link wird angezeigt und in die
+Zwischenablage kopiert. Der Klartext-Link wird serverseitig nicht gespeichert;
+nach einem erneuten Öffnen der Projektakte muss zum erneuten Teilen ein neuer
+Link ausgestellt werden. **Link erneuern** widerruft den vorherigen Link,
+**Freigabe beenden** sperrt ihn sofort. Uploads sind auf unterstützte Bild- und
+Videoformate und 100 MB je Datei begrenzt. Prüfe in Supabase außerdem die
+Storage-Kontingente deines Tarifs.

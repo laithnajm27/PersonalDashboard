@@ -1,9 +1,12 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/project.dart';
 import '../../models/workspace.dart';
+import '../../services/project_gallery_service.dart';
 import '../../services/supabase_service.dart';
 import 'shotlist_view.dart';
 
@@ -23,11 +26,17 @@ class ProjectDetailView extends StatefulWidget {
 
 class _ProjectDetailViewState extends State<ProjectDetailView> {
   final _service = SupabaseService.fromInitialized();
+  final _galleryService = ProjectGalleryService.fromInitialized();
   final _dateFormat = DateFormat('dd.MM.yyyy');
   late Project _project = widget.project;
   List<ProjectLink> _links = [];
   List<DashboardTask> _tasks = [];
+  ProjectGallery? _gallery;
+  List<ProjectGalleryMedia> _galleryMedia = [];
+  Map<String, String> _mediaUrls = {};
+  String? _shareUrl;
   bool _loading = true;
+  bool _uploadingMedia = false;
   String? _error;
 
   @override
@@ -53,9 +62,19 @@ class _ProjectDetailViewState extends State<ProjectDetailView> {
       final results = await Future.wait([
         _service.getProjectLinks(projectId),
         _service.getTasks(projectId: projectId),
+        _galleryService.getGallery(projectId),
       ]);
       _links = results[0] as List<ProjectLink>;
       _tasks = results[1] as List<DashboardTask>;
+      _gallery = results[2] as ProjectGallery?;
+      final galleryId = _gallery?.id;
+      if (galleryId == null) {
+        _galleryMedia = [];
+        _mediaUrls = {};
+      } else {
+        _galleryMedia = await _galleryService.getMedia(galleryId);
+        _mediaUrls = await _galleryService.createSignedUrls(_galleryMedia);
+      }
     } catch (error) {
       _error = 'Projektinformationen konnten nicht geladen werden: $error';
     } finally {
@@ -155,6 +174,199 @@ class _ProjectDetailViewState extends State<ProjectDetailView> {
     } catch (error) {
       if (mounted) {
         _message('Aufgabe konnte nicht gespeichert werden: $error');
+      }
+    }
+  }
+
+  Future<void> _editGallery() async {
+    final edited = await showDialog<ProjectGallery>(
+      context: context,
+      builder: (_) => _ProjectGalleryDialog(
+        project: _project,
+        gallery: _gallery,
+      ),
+    );
+    if (edited == null) {
+      return;
+    }
+    try {
+      await _galleryService.saveGallery(edited);
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        _message('Galerie konnte nicht gespeichert werden: $error');
+      }
+    }
+  }
+
+  Future<void> _uploadGalleryMedia() async {
+    final gallery = _gallery;
+    if (gallery == null) {
+      _message('Richte zuerst die Galerie ein.');
+      return;
+    }
+    try {
+      final selection = await FilePicker.platform.pickFiles(
+        type: FileType.media,
+        allowMultiple: true,
+        withData: true,
+      );
+      if (selection == null || selection.files.isEmpty) {
+        return;
+      }
+      setState(() => _uploadingMedia = true);
+      final uploaded = await _galleryService.uploadFiles(
+        gallery: gallery,
+        files: selection.files,
+      );
+      await _load();
+      if (mounted) {
+        _message('${uploaded.length} Medien zur Galerie hinzugefügt.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _message('Medien konnten nicht hochgeladen werden: $error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingMedia = false);
+      }
+    }
+  }
+
+  Future<void> _deleteGalleryMedia(ProjectGalleryMedia media) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Medium entfernen?'),
+        content: Text('„${media.title}“ wird aus der Kundengalerie entfernt.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Entfernen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _galleryService.deleteMedia(media);
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        _message('Medium konnte nicht vollständig entfernt werden: $error');
+      }
+    }
+  }
+
+  Future<void> _createShareLink() async {
+    final gallery = _gallery;
+    if (gallery == null || gallery.id == null) {
+      _message('Richte zuerst die Galerie ein.');
+      return;
+    }
+    if (gallery.isActive) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Galerie-Link erneuern?'),
+          content: const Text(
+            'Ein neuer Link macht alle zuvor geteilten Links sofort ungültig.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Link erneuern'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) {
+        return;
+      }
+    }
+    try {
+      final shareUrl = await _galleryService.issueShareLink(gallery);
+      if (!mounted) {
+        return;
+      }
+      setState(() => _shareUrl = shareUrl);
+      await _load();
+      await Clipboard.setData(ClipboardData(text: shareUrl));
+      if (mounted) {
+        _message('Galerie-Link erstellt und in die Zwischenablage kopiert.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _message('Galerie-Link konnte nicht erstellt werden: $error');
+      }
+    }
+  }
+
+  Future<void> _copyShareLink() async {
+    final shareUrl = _shareUrl;
+    if (shareUrl == null) {
+      return;
+    }
+    try {
+      await Clipboard.setData(ClipboardData(text: shareUrl));
+      if (mounted) {
+        _message('Galerie-Link kopiert.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _message('Link konnte nicht kopiert werden: $error');
+      }
+    }
+  }
+
+  Future<void> _revokeShareLink() async {
+    final gallery = _gallery;
+    if (gallery == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Freigabe beenden?'),
+        content: const Text('Der bisher geteilte Link wird sofort ungültig.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Freigabe beenden'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _galleryService.revokeShareLink(gallery);
+      if (mounted) {
+        setState(() => _shareUrl = null);
+      }
+      await _load();
+      if (mounted) {
+        _message('Der Galerie-Link wurde widerrufen.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _message('Freigabe konnte nicht beendet werden: $error');
       }
     }
   }
@@ -371,6 +583,158 @@ class _ProjectDetailViewState extends State<ProjectDetailView> {
                       ),
                       const SizedBox(height: 12),
                       _SectionCard(
+                        title: 'Kundengalerie',
+                        icon: Icons.photo_library_outlined,
+                        action: Wrap(
+                          spacing: 4,
+                          children: [
+                            IconButton(
+                              tooltip: 'Galerie-Einstellungen',
+                              onPressed: _editGallery,
+                              icon: const Icon(Icons.tune),
+                            ),
+                            IconButton(
+                              tooltip: 'Bilder oder Videos hinzufügen',
+                              onPressed: _gallery == null || _uploadingMedia
+                                  ? null
+                                  : _uploadGalleryMedia,
+                              icon: _uploadingMedia
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.add_photo_alternate_outlined),
+                            ),
+                          ],
+                        ),
+                        child: _gallery == null
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const _EmptySection(
+                                    text:
+                                        'Erstelle eine gebrandete Galerie für dieses Projekt, lade Fotos und Videos hoch und teile einen privaten Kundenlink.',
+                                  ),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: FilledButton.icon(
+                                      onPressed: _editGallery,
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Galerie einrichten'),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _gallery!.isActive
+                                            ? Icons.public
+                                            : Icons.lock_outline,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _gallery!.isActive
+                                              ? 'Freigabe aktiv'
+                                              : 'Noch nicht freigegeben',
+                                        ),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: _createShareLink,
+                                        icon: const Icon(
+                                          Icons.link,
+                                          size: 18,
+                                        ),
+                                        label: Text(
+                                          _gallery!.isActive
+                                              ? 'Link erneuern'
+                                              : 'Link erstellen',
+                                        ),
+                                      ),
+                                      if (_gallery!.isActive)
+                                        IconButton(
+                                          tooltip: 'Freigabe beenden',
+                                          onPressed: _revokeShareLink,
+                                          icon: const Icon(
+                                            Icons.link_off,
+                                            size: 20,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  if (_shareUrl != null) ...[
+                                    const SizedBox(height: 8),
+                                    SelectableText(
+                                      _shareUrl!,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton.icon(
+                                        onPressed: _copyShareLink,
+                                        icon: const Icon(Icons.copy, size: 18),
+                                        label: const Text('Link kopieren'),
+                                      ),
+                                    ),
+                                  ] else if (_gallery!.isActive) ...[
+                                    const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 8),
+                                      child: Text(
+                                        'Der aktive Link wird aus Sicherheitsgründen nicht gespeichert. Erzeuge einen neuen Link, um ihn erneut zu kopieren.',
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '${_galleryMedia.length} Medien · ${_gallery!.title}',
+                                    style:
+                                        Theme.of(context).textTheme.labelLarge,
+                                  ),
+                                  if (_galleryMedia.isEmpty)
+                                    const _EmptySection(
+                                      text:
+                                          'Lade JPG-, PNG-, WebP-, GIF-, MP4-, MOV- oder WebM-Dateien bis 100 MB hoch.',
+                                    )
+                                  else ...[
+                                    const SizedBox(height: 12),
+                                    Wrap(
+                                      spacing: 10,
+                                      runSpacing: 10,
+                                      children: [
+                                        for (final media in _galleryMedia)
+                                          _GalleryMediaTile(
+                                            media: media,
+                                            signedUrl: _mediaUrls[media.id],
+                                            onDelete: () =>
+                                                _deleteGalleryMedia(media),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _gallery!.allowDownload
+                                        ? 'Die Galerie zeigt eine Download-/Speicheraktion. Geteilte Medien können grundsätzlich auch unabhängig davon gespeichert werden.'
+                                        : 'Die Download-Schaltfläche ist ausgeblendet. Ein geteilter Link kann Medien jedoch nicht vor dem Speichern schützen.',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      _SectionCard(
                         title: 'Aufgaben',
                         icon: Icons.task_alt,
                         action: IconButton(
@@ -497,7 +861,8 @@ class _ProjectOverviewCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              Text(customerName, style: Theme.of(context).textTheme.titleMedium),
+              Text(customerName,
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 16),
               Wrap(
                 spacing: 20,
@@ -657,6 +1022,7 @@ class _ProjectEditorDialogState extends State<_ProjectEditorDialog> {
   );
   late DateTime? _startAt = widget.project.startAt;
   late DateTime? _dueAt = widget.project.dueAt;
+  String? _dateError;
 
   @override
   void dispose() {
@@ -678,6 +1044,13 @@ class _ProjectEditorDialogState extends State<_ProjectEditorDialog> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (_startAt != null && _dueAt != null && _dueAt!.isBefore(_startAt!)) {
+      setState(() {
+        _dateError = 'Das Projektende darf nicht vor dem Start liegen.';
+      });
+      return;
+    }
+    _dateError = null;
     final budgetText = _budget.text.trim().replaceAll(',', '.');
     final budget = budgetText.isEmpty ? null : double.tryParse(budgetText);
     if (budgetText.isNotEmpty &&
@@ -785,6 +1158,16 @@ class _ProjectEditorDialogState extends State<_ProjectEditorDialog> {
                       ? null
                       : () => setState(() => _dueAt = null),
                 ),
+                if (_dateError != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _dateError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -952,6 +1335,178 @@ class _ProjectLinkDialogState extends State<_ProjectLinkDialog> {
             child: const Text('Speichern'),
           ),
         ],
+      );
+}
+
+class _ProjectGalleryDialog extends StatefulWidget {
+  const _ProjectGalleryDialog({
+    required this.project,
+    this.gallery,
+  });
+
+  final Project project;
+  final ProjectGallery? gallery;
+
+  @override
+  State<_ProjectGalleryDialog> createState() => _ProjectGalleryDialogState();
+}
+
+class _ProjectGalleryDialogState extends State<_ProjectGalleryDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _title = TextEditingController(
+    text: widget.gallery?.title ?? widget.project.titel,
+  );
+  late final _description = TextEditingController(
+    text: widget.gallery?.description ?? '',
+  );
+  late bool _allowDownload = widget.gallery?.allowDownload ?? false;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.gallery == null
+            ? 'Kundengalerie einrichten'
+            : 'Galerie-Einstellungen'),
+        content: SizedBox(
+          width: 480,
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _title,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Galerietitel',
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Bitte gib einen Galerietitel ein.'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _description,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Nachricht für den Kunden',
+                      hintText: 'Persönliche Begrüßung oder kurze Hinweise',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _allowDownload,
+                    onChanged: (value) =>
+                        setState(() => _allowDownload = value),
+                    title: const Text('Download-Schaltfläche anzeigen'),
+                    subtitle: const Text(
+                      'Ein privater Link kann das Speichern geteilter Medien nicht technisch verhindern.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!_formKey.currentState!.validate()) {
+                return;
+              }
+              Navigator.pop(
+                context,
+                ProjectGallery(
+                  id: widget.gallery?.id,
+                  projectId: widget.project.id!,
+                  title: _title.text.trim(),
+                  description: _description.text.trim(),
+                  allowDownload: _allowDownload,
+                  isActive: widget.gallery?.isActive ?? false,
+                ),
+              );
+            },
+            child: const Text('Speichern'),
+          ),
+        ],
+      );
+}
+
+class _GalleryMediaTile extends StatelessWidget {
+  const _GalleryMediaTile({
+    required this.media,
+    required this.signedUrl,
+    required this.onDelete,
+  });
+
+  final ProjectGalleryMedia media;
+  final String? signedUrl;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 170,
+        child: Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 4 / 3,
+                child: media.isVideo
+                    ? ColoredBox(
+                        color: Theme.of(context).colorScheme.surfaceContainer,
+                        child: const Center(
+                          child: Icon(Icons.play_circle_outline, size: 42),
+                        ),
+                      )
+                    : signedUrl == null
+                        ? const Center(
+                            child: Icon(Icons.image_not_supported_outlined),
+                          )
+                        : Image.network(
+                            signedUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Center(
+                              child: Icon(Icons.broken_image_outlined),
+                            ),
+                          ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        media.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Aus Galerie entfernen',
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline, size: 19),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       );
 }
 
